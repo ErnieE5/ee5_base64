@@ -298,11 +298,11 @@ local function encode64_tostring(raw)
     -- Tests with an 820K string in memory. Result is 1.1M of data.
     --      Lua         Lua         base64
     --      predicate   iterator    (gnu 8.21)
-    --      1.147s      1.211s      0.054s
-    --      1.136s      1.213s      0.048s
-    --      1.111s      1.218s      0.050s
-    --      1.164s      1.191s      0.042s
-    --      1.120s      1.183s      0.046s
+    --      0.555s      0.635s      0.054s
+    --      0.557s      0.576s      0.048s
+    --      0.598s      0.609s      0.050s
+    --      0.541s      0.602s      0.042s
+    --      0.539s      0.604s      0.046s
     --
     encode64_with_predicate( raw, collection_predicate )
 --  encode64_with_ii( encode64_string_iterator( raw ), collection_predicate )
