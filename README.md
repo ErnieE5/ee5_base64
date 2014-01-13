@@ -35,7 +35,7 @@ for large strings. A Lua c-module would handle this considerably faster.
 More Examples:
 --------------
 (see test.lua when I check it in too!)
-###stdio
+####stdio
 ```lua
 base64=require("base64")
 ii=base64.encode_ii(io.stdin)
@@ -44,11 +44,12 @@ base64._encode_(ii,function(s) io.write(s) end)
 ```bash
 lua test.lua < base64.lua
 ```
-```output
+**Output:**
+```
 LS1bWyoqKioqKioqKio ... dGVyYXRvcgp9Cg==
 ```
 
-### output predicate
+#### output predicate
 ```lua
 o={}
 base64.encode_("Encode this please",function(s) o[#o+1]=s end)
@@ -56,7 +57,8 @@ for i,v in ipairs(o) do
     print(i,v)
 end
 ```
-```output
+**Output:**
+```
 1   RW5j
 2   b2Rl
 3   IHRo
@@ -64,7 +66,7 @@ end
 5   cGxl
 6   YXNl
 ```
-
+#### output predicate
 ```lua
 function linespliter()
     local c = 0
@@ -83,7 +85,8 @@ s=f:read("*a")
 f:close()
 base64.encode_(s,linespliter())
 ```
-```output
+**Output:**
+```
 LS1bWyoqKioqKioqKioqKioq
 KioqKioqKioqKioqKioqKioq
         . . .
@@ -92,12 +95,13 @@ ZGU2NF9pb19pdGVyYXRvcgp9
 Cg==
 ```
 
-
+#### garbled input
 ```lua
 -- Mess with the input "V2hhdCBpcyB0aGlzPwo="
 s="V 2 h h d C Bp c y(((@!!!!\n\n\r\t\tB0aGlzPwo=           :-)     ?"
 print(base64.decode(s))
 ```
+**Output:**
 ```output
 What is this?
 ```
