@@ -30,11 +30,12 @@ Dude! Where is my car???
 
 For "very large strings" this may not be the best way to use the library.
 > In fact, I likely wouldn't encourage using these routines **all the time**
-for large strings. A Lua C-Module would handle this considerably faster.
+for large strings. A Lua c-module would handle this considerably faster.
 
 More Examples:
 --------------
 (see test.lua when I check it in too!)
+###stdio
 ```lua
 base64=require("base64")
 ii=base64.encode_ii(io.stdin)
@@ -44,6 +45,59 @@ base64._encode_(ii,function(s) io.write(s) end)
 lua test.lua < base64.lua
 ```
 ```output
-LS1bWyoqKioqKioqKio  . . . dGVyYXRvcgp9Cg==
+LS1bWyoqKioqKioqKio ... dGVyYXRvcgp9Cg==
 ```
 
+### output predicate
+```lua
+o={}
+base64.encode_("Encode this please",function(s) o[#o+1]=s end)
+for i,v in ipairs(o) do
+    print(i,v)
+end
+```
+```output
+1   RW5j
+2   b2Rl
+3   IHRo
+4   aXMg
+5   cGxl
+6   YXNl
+```
+
+```lua
+function linespliter()
+    local c = 0
+    return function(s)
+        io.write(s)
+        c=c+1
+        if c > 5 then
+            io.write("\n")
+            c=0
+        end
+    end
+end
+
+f=io.open("base64.lua")
+s=f:read("*a")
+f:close()
+base64.encode_(s,linespliter())
+```
+```output
+LS1bWyoqKioqKioqKioqKioq
+KioqKioqKioqKioqKioqKioq
+        . . .
+ZGVjb2RlX2lpICAgPSBkZWNv
+ZGU2NF9pb19pdGVyYXRvcgp9
+Cg==
+```
+
+
+```lua
+-- Mess with the input "V2hhdCBpcyB0aGlzPwo="
+s="V 2 h h d C Bp c y(((@!!!!\n\n\r\t\tB0aGlzPwo=           :-)     ?"
+print(base64.decode(s))
+```
+```output
+What is this?
+```
