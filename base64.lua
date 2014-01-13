@@ -156,11 +156,10 @@ local function encode64_io_iterator(file)
         --
         return function()
             s = file:read(3)
-            if #s == 3 then
+            if s ~= nil and #s == 3 then
                 return s:byte(1), s:byte(2), s:byte(3)
-            else
-                return nil
             end
+            return nil
         end
     end
 
