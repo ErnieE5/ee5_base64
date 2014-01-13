@@ -29,7 +29,9 @@
 --  See the input iterators for information.
 --
 --  History:
---
+--      2014/01/13 Original implementation
+--      2014/01/13 Performance enhancments
+
 
 
 --[[**************************************************************************]]
@@ -79,22 +81,12 @@ local tail_padd64=
 --  encoded base64 values.
 --
 local function m64( a, b, c )
+    local cvt=bit32.lshift(a,16)+bit32.lshift(b,8)+c
   return
-    b64e[(bit32.btest(a,128) and 32 or 0)+ (bit32.btest(a, 64) and 16 or 0)+
-         (bit32.btest(a, 32) and  8 or 0)+ (bit32.btest(a, 16) and  4 or 0)+
-         (bit32.btest(a,  8) and  2 or 0)+ (bit32.btest(a,  4) and  1 or 0)],
-
-    b64e[(bit32.btest(a,  2) and 32 or 0)+ (bit32.btest(a,  1) and 16 or 0)+
-         (bit32.btest(b,128) and  8 or 0)+ (bit32.btest(b, 64) and  4 or 0)+
-         (bit32.btest(b, 32) and  2 or 0)+ (bit32.btest(b, 16) and  1 or 0)],
-
-    b64e[(bit32.btest(b,  8) and 32 or 0)+ (bit32.btest(b,  4) and 16 or 0)+
-         (bit32.btest(b,  2) and  8 or 0)+ (bit32.btest(b,  1) and  4 or 0)+
-         (bit32.btest(c,128) and  2 or 0)+ (bit32.btest(c, 64) and  1 or 0)],
-
-    b64e[(bit32.btest(c, 32) and 32 or 0)+ (bit32.btest(c, 16) and 16 or 0)+
-         (bit32.btest(c,  8) and  8 or 0)+ (bit32.btest(c,  4) and  4 or 0)+
-         (bit32.btest(c,  2) and  2 or 0)+ (bit32.btest(c,  1) and  1 or 0)]
+        b64e[ bit32.band( bit32.rshift(cvt,18), 0x3f ) ],
+        b64e[ bit32.band( bit32.rshift(cvt,12), 0x3f ) ],
+        b64e[ bit32.band( bit32.rshift(cvt, 6), 0x3f ) ],
+        b64e[ bit32.band( cvt, 0x3f ) ]
 end
 
 
@@ -356,29 +348,20 @@ local b64d=
 --  encoded in the original base64 encoded string.
 --
 local function u64( b1, b2, b3, b4 )
-
     -- Shift the four six bit values into the byte pattern for the three
     -- full eight bit values
     --
-    local a, b, c, d = b64d[ b1 ], b64d[ b2 ], b64d[ b3 ], b64d[ b4 ]
+    local cvt=bit32.lshift(b64d[ b1 ], 18) +
+              bit32.lshift(b64d[ b2 ], 12) +
+              bit32.lshift(b64d[ b3 ],  6) +
+                           b64d[ b4 ]
 
     -- Return the three full eight bit values that are the raw data
     --
     return
-       (bit32.btest(a,32) and 128 or 0)+ (bit32.btest(a,16) and  64 or 0)+
-       (bit32.btest(a, 8) and  32 or 0)+ (bit32.btest(a, 4) and  16 or 0)+
-       (bit32.btest(a, 2) and   8 or 0)+ (bit32.btest(a, 1) and   4 or 0)+
-       (bit32.btest(b,32) and   2 or 0)+ (bit32.btest(b,16) and   1 or 0),
-
-       (bit32.btest(b, 8) and 128 or 0)+ (bit32.btest(b, 4) and  64 or 0)+
-       (bit32.btest(b, 2) and  32 or 0)+ (bit32.btest(b, 1) and  16 or 0)+
-       (bit32.btest(c,32) and   8 or 0)+ (bit32.btest(c,16) and   4 or 0)+
-       (bit32.btest(c, 8) and   2 or 0)+ (bit32.btest(c, 4) and   1 or 0),
-
-       (bit32.btest(c, 2) and 128 or 0)+ (bit32.btest(c, 1) and  64 or 0)+
-       (bit32.btest(d,32) and  32 or 0)+ (bit32.btest(d,16) and  16 or 0)+
-       (bit32.btest(d, 8) and   8 or 0)+ (bit32.btest(d, 4) and   4 or 0)+
-       (bit32.btest(d, 2) and   2 or 0)+ (bit32.btest(d, 1) and   1 or 0)
+        bit32.band( bit32.rshift(cvt,16), 0xff ),
+        bit32.band( bit32.rshift(cvt, 8), 0xff ),
+        bit32.band( cvt, 0xff )
 end
 
 -- pattern_run is the base expression to strip four "valid"
@@ -524,8 +507,7 @@ local function decode64_with_predicate( raw, out )
     -- three full bytes.
     --
     -- The three full bytes are sent into string.char to build a result
-    -- string and finally this string is put into the result concatenation
-    -- table.
+    -- string and finally this string is sent to the output predicate.
     --
     for a, b, c, d in raw:gmatch( gmatch_run ) do
         out( string.char( u64( a:byte(), b:byte(), c:byte(), d:byte() ) ) )
@@ -582,5 +564,5 @@ return
     _decode_    = decode64_with_ii,
 
     encode_ii   = encode64_io_iterator,
-    decode_ii   = decode64_io_iterator
+    decode_ii   = decode64_io_iterator,
 }
