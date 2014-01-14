@@ -62,7 +62,7 @@ LS1bWyoqKioqKioqKio ... dGVyYXRvcgp9Cg==
 #### output predicate
 ```lua
 o={}
-base64.encode_("Encode this please",function(s) o[#o+1]=s end)
+base64.encode("Encode this please",function(s) o[#o+1]=s end)
 for i,v in ipairs(o) do
     print(i,v)
 end

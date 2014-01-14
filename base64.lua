@@ -403,7 +403,7 @@ local gmatch_run    = pattern_run..pattern_run..pattern_run..pattern_run
 -- the end of a base64 encoded input
 --
 local pattern_end   = "[^%a%d%+%/%=]-([%a%d%+%/%=])"
-local find_end      = ".*"..pattern_end..pattern_end..pattern_end.."([%=]).*$"
+local find_end      = ".*"..pattern_end..pattern_end..pattern_end.."[^%a%d%+%/%=]-([%=]).*$"
 
 -- pattern_strip is used to filter "invalid" input from
 -- partial strings used by input iterators
@@ -426,13 +426,13 @@ local function decode_tail64( out, e1, e2 ,e3, e4 )
         end
 
         -- Unpack the six bit values into the 8 bit values
-        local b1, b2, b3 = u64( e1:byte(), e2:byte(), n3, b64e[0] )
+        local b1, b2 = u64( e1:byte(), e2:byte(), n3, b64e[0] )
 
         -- And add them to the res table
-        if e3 ~= nil then
-            out( string.char( b1, b2, b3 ) )
-        else
+        if e3 ~= nil and e3 ~= tail_padd64[2] then
             out( string.char( b1, b2 ) )
+        else
+            out( string.char( b1 ) )
         end
     end
 end
@@ -488,6 +488,7 @@ local function decode64_io_iterator( file )
         elseif #ll%4 == 2       then     e1,e2       = ll:sub(-2,-2), ll:sub(-1,-1)
         elseif #ll%4 == 1       then     e1          = ll:sub(-1,-1)
         end
+
         if e1 ~= nil then
             decode_tail64( function(s) coroutine.yield( s ) end, e1, e2, e3, e4 )
         end
@@ -562,8 +563,9 @@ local function decode64_with_predicate( raw, out )
         else
             _,_, e1, e2, e3, e4 = raw:find( find_end )
         end
-
-        decode_tail64( out, e1, e2, e3, e4 )
+        if e1 ~= nil then
+            decode_tail64( out, e1, e2, e3, e4 )
+        end
     else
         for i=1,#raw-#raw%4,4 do
             out( string.char( u64( raw:byte(i), raw:byte(i+1), raw:byte(i+2), raw:byte(i+3) ) ) )
@@ -650,6 +652,15 @@ local function set_and_get_alphabet(alpha,term)
             tail_padd64[2]=""
         end
 
+        local esc_term
+
+        if magic[c_alpha._term] ~= nil then
+            esc_term=c_alpha._term:gsub(magic[c_alpha._term],function (s) return magic[s] end)
+        elseif c_alpha._term == "%" then
+            esc_term = "%%"
+        else
+            esc_term=c_alpha._term
+        end
 
         if not c_alpha._run then
             local p=s:gsub("%%",function (s) return "__unique__" end)
@@ -657,27 +668,24 @@ local function set_and_get_alphabet(alpha,term)
             do
                 p=p:gsub(v,function (s) return magic[s] end )
             end
-            c_alpha._run=p:gsub("__unique__",function() return "%%" end)
-            if magic[c_alpha._term] ~= nil then
-                c_alpha._term=c_alpha._term:gsub(magic[c_alpha._term],function (s) return magic[s] end)
-            end
-            if c_alpha._term == "%" then c_alpha._term = "%%" end
+            local mr=p:gsub("__unique__",function() return "%%" end)
 
-            pattern_run     = string.format("[^%s]-([%s])",c_alpha._run,c_alpha._run)
-            pattern_end     = string.format("[^%s%s]-([%s%s])",c_alpha._run,c_alpha._term,c_alpha._run,c_alpha._term)
-            pattern_strip   = string.format("[^%s%s]",c_alpha._run,c_alpha._term)
-        else
-            assert( c_alpha._end   )
-            assert( c_alpha._strip )
-            pattern_run   = c_alpha._run
-            pattern_end   = c_alpha._end
-            pattern_strip = c_alpha._strip
+            c_alpha._run   = string.format("[^%s]-([%s])",mr,mr)
+            c_alpha._end   = string.format("[^%s%s]-([%s%s])",mr,esc_term,mr,esc_term)
+            c_alpha._strip = string.format("[^%s%s]",mr,esc_term)
         end
 
-        gmatch_run  = pattern_run..pattern_run..pattern_run..pattern_run
+        assert( c_alpha._run   )
+        assert( c_alpha._end   )
+        assert( c_alpha._strip )
 
-        if c_alpha._term ~= "" then
-            find_end = string.format(".*%s%s%s([%s]).*$",pattern_end,pattern_end,pattern_end,c_alpha._term)
+        pattern_run   = c_alpha._run
+        pattern_end   = c_alpha._end
+        pattern_strip = c_alpha._strip
+        gmatch_run    = pattern_run..pattern_run..pattern_run..pattern_run
+
+        if esc_term ~= "" then
+            find_end = string.format(".*%s%s%s%s-([%s]).*$",pattern_end,pattern_end,pattern_end,pattern_strip,esc_term)
         else
             find_end = string.format(".*%s%s%s%s.*$",pattern_end,pattern_end,pattern_end,pattern_end)
         end
@@ -686,8 +694,8 @@ local function set_and_get_alphabet(alpha,term)
 
         assert( c_alpha._alpha == s,        "Integrity error." )
         assert( c == 64,                    "The alphabet must be 64 unique values." )
-        if c_alpha._term ~= "" then
-            assert( not c_alpha._alpha:find(c_alpha._term), "Tail characters must not exist in alphabet." )
+        if esc_term ~= "" then
+            assert( not c_alpha._alpha:find(esc_term), "Tail characters must not exist in alphabet." )
         end
 
         if known_base64_alphabets[alpha] == nil then
