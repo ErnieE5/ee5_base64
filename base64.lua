@@ -61,7 +61,7 @@ local known_base64_alphabets=
         _term=""
     },
 }
-
+local c_alpha=known_base64_alphabets.base64
 
 --[[**************************************************************************]]
 --[[****************************** Encoding **********************************]]
@@ -605,91 +605,97 @@ end
 --
 local function set_and_get_alphabet(alpha,term)
 
-    local magic=
-    {
---        ["%"]="%%",
-        [" "]="% ",
-        ["^"]="%^",
-        ["$"]="%$",
-        ["("]="%(",
-        [")"]="%)",
-        ["."]="%.",
-        ["["]="%[",
-        ["]"]="%]",
-        ["*"]="%*",
-        ["+"]="%+",
-        ["-"]="%-",
-        ["?"]="%?",
-    }
+    if alpha ~= nil then
+        local magic=
+        {
+    --        ["%"]="%%",
+            [" "]="% ",
+            ["^"]="%^",
+            ["$"]="%$",
+            ["("]="%(",
+            [")"]="%)",
+            ["."]="%.",
+            ["["]="%[",
+            ["]"]="%]",
+            ["*"]="%*",
+            ["+"]="%+",
+            ["-"]="%-",
+            ["?"]="%?",
+        }
 
-    a=known_base64_alphabets[alpha]
-    if a == nil then
-        a={ _alpha=alpha, _term=term }
-    end
-
-    assert( #a._alpha == 64,    "The alphabet ~must~ be 64 unique values."  )
-    assert( #a._term   <  1,    "Specify zero or one termination character.")
-
-    b64d={}
-    b64e={}
-    local s=""
-    for i = 1,64 do
-        local byte = a._alpha:byte(i)
-        local str  = string.char(byte)
-        b64e[i-1]=byte
-        assert( b64d[byte] == nil, "Duplicate value '"..str.."'" )
-        b64d[byte]=i-1
-        s=s..str
-    end
-    if a._term ~= "" then
-        tail_padd64[1]=string.char(a._term:byte(),a._term:byte())
-        tail_padd64[2]=string.char(a._term:byte())
-    else
-        tail_padd64[1]=""
-        tail_padd64[2]=""
-    end
-
-
-    if not a._run then
-        local p=s:gsub("%%",function (s) return "__unique__" end)
-        for k,v in pairs(magic)
-        do
-            p=p:gsub(v,function (s) return magic[s] end )
+        c_alpha=known_base64_alphabets[alpha]
+        if c_alpha == nil then
+            c_alpha={ _alpha=alpha, _term=term }
         end
-        a._run=p:gsub("__unique__",function() return "%%" end)
-        if magic[a._term] ~= nil then
-            a._term=a._term:gsub(magic[a._term],function (s) return magic[s] end)
+
+        assert( #c_alpha._alpha == 64,    "The alphabet ~must~ be 64 unique values."  )
+        assert( #c_alpha._term   <  1,    "Specify zero or one termination character.")
+
+        b64d={}
+        b64e={}
+        local s=""
+        for i = 1,64 do
+            local byte = c_alpha._alpha:byte(i)
+            local str  = string.char(byte)
+            b64e[i-1]=byte
+            assert( b64d[byte] == nil, "Duplicate value '"..str.."'" )
+            b64d[byte]=i-1
+            s=s..str
         end
-        if a._term == "%" then a._term = "%%" end
+        if c_alpha._term ~= "" then
+            tail_padd64[1]=string.char(c_alpha._term:byte(),c_alpha._term:byte())
+            tail_padd64[2]=string.char(c_alpha._term:byte())
+        else
+            tail_padd64[1]=""
+            tail_padd64[2]=""
+        end
 
-        pattern_run     = string.format("[^%s]-([%s])",a._run,a._run)
-        pattern_end     = string.format("[^%s%s]-([%s%s])",a._run,a._term,a._run,a._term)
-        pattern_strip   = string.format("[^%s%s]",a._run,a._term)
-    else
-        assert( a._end   )
-        assert( a._strip )
-        pattern_run   = a._run
-        pattern_end   = a._end
-        pattern_strip = a._strip
+
+        if not c_alpha._run then
+            local p=s:gsub("%%",function (s) return "__unique__" end)
+            for k,v in pairs(magic)
+            do
+                p=p:gsub(v,function (s) return magic[s] end )
+            end
+            c_alpha._run=p:gsub("__unique__",function() return "%%" end)
+            if magic[a._term] ~= nil then
+                c_alpha._term=c_alpha._term:gsub(magic[c_alpha._term],function (s) return magic[s] end)
+            end
+            if c_alpha._term == "%" then c_alpha._term = "%%" end
+
+            pattern_run     = string.format("[^%s]-([%s])",c_alpha._run,c_alpha._run)
+            pattern_end     = string.format("[^%s%s]-([%s%s])",c_alpha._run,c_alpha._term,c_alpha._run,c_alpha._term)
+            pattern_strip   = string.format("[^%s%s]",c_alpha._run,c_alpha._term)
+        else
+            assert( c_alpha._end   )
+            assert( c_alpha._strip )
+            pattern_run   = c_alpha._run
+            pattern_end   = c_alpha._end
+            pattern_strip = c_alpha._strip
+        end
+
+        gmatch_run  = pattern_run..pattern_run..pattern_run..pattern_run
+
+        if c_alpha._term ~= "" then
+            find_end = string.format(".*%s%s%s([%s]).*$",pattern_end,pattern_end,pattern_end,c_alpha._term)
+        else
+            find_end = string.format(".*%s%s%s%s.*$",pattern_end,pattern_end,pattern_end,pattern_end)
+        end
+
+        local c =0 for i in pairs(b64d) do c=c+1 end
+
+        assert( c_alpha._alpha == s,        "Integrity error." )
+        assert( c == 64,                    "The alphabet must be 64 unique values." )
+        if c_alpha._term ~= "" then
+            assert( not c_alpha._alpha:find(c_alpha._term), "Tail characters must not exist in alphabet." )
+        end
+
+        if known_base64_alphabets[alpha] == nil then
+            known_base64_alphabets[alpha]=c_alpha
+        end
     end
 
-    gmatch_run  = pattern_run..pattern_run..pattern_run..pattern_run
-
-    if a._term ~= "" then
-        find_end = string.format(".*%s%s%s([%s]).*$",pattern_end,pattern_end,pattern_end,a._term)
-    else
-        find_end = string.format(".*%s%s%s%s.*$",pattern_end,pattern_end,pattern_end,pattern_end)
-    end
-
-    local c =0 for i in pairs(b64d) do c=c+1 end
-
-    assert( a._alpha == s,              "Integrity error." )
-    assert( c == 64,                    "The alphabet must be 64 unique values." )
-    if a._term ~= "" then
-    assert( not a._alpha:find(a._term), "Tail characters must not exist in alphabet." )
-    end
-
-    return s,a._term
+    return c_alpha._alpha,c_alpha._term
 end
 
 
