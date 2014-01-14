@@ -714,7 +714,7 @@ local function encode64(i,o)
             encode64_with_predicate(i,o)
         else
             assert( o == nil, "unsupported request")
-            encode64_tostring(i)
+            return encode64_tostring(i)
         end
     end
 end
@@ -735,7 +735,7 @@ local function decode64(i,o)
             decode64_with_predicate(i,o)
         else
             assert( o == nil, "unsupported request")
-            decode64_tostring(i)
+            return decode64_tostring(i)
         end
     end
 end
