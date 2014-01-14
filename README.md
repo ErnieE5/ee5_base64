@@ -13,7 +13,7 @@ __Use as you will.__ No warranty. (What do you expect for "free stuff" you find 
 -----
 
 ####_Why?_ (yet another Lua base64 converter)
-I was looking for some "natual Lua" base64 encoding routines and didn't find any "fast enough." The project this was written for runs on three different platforms (OSX, Linux, ARM/x64) and would require 3 different binaries, so I wanted to KISS it. With Lua 5.2 and the bit32 library I suspected that a better job could be done. The best routine I found (prior to starting this version) used a considerable amount of memory. For an 800K file, over 6.5M was needed for an intermediate value. This was way too much. I considered popen("base64"), but this isn't easily portable.  Speed was an issue when 800K files took over 2 full seconds. So...
+I was looking for some "natural Lua" base64 encoding routines and didn't find any "fast enough." The project this was written for runs on three different platforms (OSX, Linux, ARM/x64) and would require 3 different binaries, so I wanted to KISS it. With Lua 5.2 and the bit32 library I suspected that a better job could be done. The best routine I found (prior to starting this version) used a considerable amount of memory. For an 800K file, over 6.5M was needed for an intermediate value. This was way too much. I considered popen("base64"), but this isn't easily portable.  Speed was an issue when 800K files took over 2 full seconds. So...
 
 
 Basic Usage
@@ -37,7 +37,7 @@ Dude! Where is my car???
 > I don't encourage using these routines (**at all**) for large strings. A Lua c-module will handle this _considerably_ faster. Just "for fun" I ran a 600M file through base64 and this utility. 0m3.306s vs **8m**13.139s! It is plausible that base64 spun multiple threads, but I suspect that the real reason is that all of the "overhead" of a function call vs an extremely tight and optimized C routine is the real factor. (this is a perverse example, it annoys me no end that base64 even _exists_)
 
 
-###More Examples:
+###More examples:
 
 ####stdio
 ```lua
