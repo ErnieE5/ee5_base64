@@ -37,7 +37,7 @@ Dude! Where is my car???
 ]]--
 ```
 
-For "very large strings" this ~~may not~~ is not be the best way to use the
+For "very large strings" this ~~may not be~~ is not the best use of the
 library.
 > In fact, I likely wouldn't encourage using these routines **at all**
 for large strings. A Lua c-module will handle this _considerably_ faster. Just
