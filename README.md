@@ -11,8 +11,11 @@ intermediate value. For my use, this was way too much. The alternative of
 doing a popen("base64") was considered, but isn't overly portable.  Speed was
 an issue when 800K files took over 2 full seconds.
 
-This module "exports" 8 methods that allow interaction with the encoding /
-decoding routines in 3 descrete ways.
+This module "exports" 5 methods with various "overloads" that allow
+interaction with the encoding / decoding routines.
+
+
+##Basic Usage
 
 The simplest is "string in" / "string out".
 
@@ -32,12 +35,11 @@ Dude! Where is my car???
 
 For "very large strings" this may not be the best way to use the library.
 > In fact, I likely wouldn't encourage using these routines **all the time**
-for large strings. A Lua c-module would handle this considerably faster.
+for large strings. A Lua c-module will handle this _considerably_ faster.
 
 
-More Examples:
---------------
-(see test.lua when I check it in too!)
+##More Examples:
+
 ####stdio
 ```lua
 base64=require("base64")
