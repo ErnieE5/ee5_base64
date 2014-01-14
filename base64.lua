@@ -52,7 +52,7 @@ local known_base64_alphabets=
         _term="="
     },
 
-    base64url=
+    base64url= -- RFC 4648 'base64url'
     {
         _alpha="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_",
         _run="[^%a%d%-%_]-([%a%d%-%_])",

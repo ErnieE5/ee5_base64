@@ -12,10 +12,14 @@ doing a popen("base64") was considered, but isn't overly portable.  Speed was
 an issue when 800K files took over 2 full seconds.
 
 This module "exports" 5 methods with various "overloads" that allow
-interaction with the encoding / decoding routines.
+interaction with the encoding / decoding routines. Default is to encode and
+decode as RFC 2045 (Ignores max line length restrictions). The input and
+output in this mode is generally compatible with the GNU base64 application.
+
+**Tested against base64 (GNU coreutils) 8.22 & 8.13.**
 
 
-##Basic Usage
+###Basic Usage
 
 The simplest is "string in" / "string out".
 
@@ -38,7 +42,7 @@ For "very large strings" this may not be the best way to use the library.
 for large strings. A Lua c-module will handle this _considerably_ faster.
 
 
-##More Examples:
+###More Examples:
 
 ####stdio
 ```lua
@@ -121,7 +125,7 @@ What is this?
 ```
 
 
-####url "safe"
+####RFC 4648 'base64url'
 ```lua
 base64.alpha("base64url")
 i=io.open("foo")
@@ -133,7 +137,7 @@ o:close()
 --[[ No output ]]--
 ```
 
-####custom alpha
+####custom alphabet
 ```lua
 base64.alpha("~`!1@2#3$4%\t6^7&8*9(0)_-+={[}]|\\:;'<D,./?qwertyuioplkjhgfdsazxcv","")
 s=base64.encode("User base64 encoding, no term chars")
