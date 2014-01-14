@@ -109,13 +109,16 @@ local tail_padd64=
 --  Helper function to convert three eight bit values into four ASCII
 --  encoded base64 values.
 --
+--  Creating a local reference to the method shaves off a hash lookup
+local ext = bit32.extract
+local bnd = bit32.band
 local function m64( a, b, c )
-    local cvt=bit32.lshift(a,16)+bit32.lshift(b,8)+c
-  return
-        b64e[ bit32.band( bit32.rshift(cvt,18), 0x3f ) ],
-        b64e[ bit32.band( bit32.rshift(cvt,12), 0x3f ) ],
-        b64e[ bit32.band( bit32.rshift(cvt, 6), 0x3f ) ],
-        b64e[ bit32.band( cvt, 0x3f ) ]
+
+    return
+        b64e[ ext( a, 2, 6 ) ],
+        b64e[ ext( a, 0, 2 )*16 + ext(b, 4, 4) ],
+        b64e[ ext( b, 0, 4 )*4  + ext(c, 6, 2) ],
+        b64e[ bnd( c, 0x3f) ]
 end
 
 
@@ -254,9 +257,10 @@ end
 --      tail bytes (for source values that are not evenly divisible by three).
 --
 local function encode64_with_ii( ii, out )
+    local sc=string.char
 
     for a, b, c in ii.begin() do
-        out( string.char( m64( a, b, c ) ) )
+        out( sc( m64( a, b, c ) ) )
     end
 
     encode_tail64( out, ii.tail() )
@@ -273,10 +277,10 @@ end
 --      is slightly faster for traversing existing strings in memory.
 --
 local function encode64_with_predicate( raw, out )
-    local rem=#raw%3        -- remainder
-    local len=#raw-rem      -- 3 byte input adjusted
-    local s  =string.char   -- mostly for notation
-    local b  =raw.byte      -- mostly for notation
+    local rem=#raw%3     -- remainder
+    local len=#raw-rem   -- 3 byte input adjusted
+    local sb=string.byte -- Mostly notational
+    local sc=string.char -- Mostly notational
 
     -- Main encode loop converts three input bytes to 4 base64 encoded
     -- ACSII values and calls the predicate with the value.
@@ -284,11 +288,11 @@ local function encode64_with_predicate( raw, out )
         -- This really isn't intended as obfuscation. It is more about
         -- loop optimization and removing temporaries.
         --
-        out( s( m64( b( raw ,i ), b( raw, i+1 ), b( raw, i+2 ) ) ) )
-        --   |  |    |            |              |
-        --   |  |    byte 1       byte 2         byte 3
-        --   |  |
-        --   |  returns 4 encoded values
+        out( sc( m64( sb( raw ,i ), sb( raw, i+1 ), sb( raw, i+2 ) ) ) )
+        --   |   |    |             |               |
+        --   |   |    byte 1        byte 2          byte 3
+        --   |   |
+        --   |   returns 4 encoded values
         --   |
         --   creates a string with the 4 returned values
     end
@@ -296,10 +300,10 @@ local function encode64_with_predicate( raw, out )
     -- If we have a number of input bytes that isn't exactly divisible
     -- by 3 then we need to pad the tail
     if rem > 0 then
-        local x, y = b( raw, len+1 )
+        local x, y = sb( raw, len+1 )
 
         if rem > 1 then
-            y = b( raw, len+2 )
+            y = sb( raw, len+2 )
         end
 
         encode_tail64( out, x, y )
@@ -327,14 +331,14 @@ local function encode64_tostring(raw)
     -- Tests with an 820K string in memory. Result is 1.1M of data.
     --      Lua         Lua         base64
     --      predicate   iterator    (gnu 8.21)
-    --      0.555s      0.635s      0.054s
-    --      0.557s      0.576s      0.048s
-    --      0.598s      0.609s      0.050s
-    --      0.541s      0.602s      0.042s
-    --      0.539s      0.604s      0.046s
+    --      0.373s      0.426s      0.054s
+    --      0.375s      0.430s      0.048s
+    --      0.374s      0.419s      0.050s
+    --      0.359s      0.426s      0.042s
+    --      0.370s      0.428s      0.046s
     --
     encode64_with_predicate( raw, collection_predicate )
---  encode64_with_ii( encode64_string_iterator( raw ), collection_predicate )
+    --encode64_with_ii( encode64_string_iterator( raw ), collection_predicate )
 
     return table.concat(sb)
 end
@@ -452,6 +456,7 @@ local function decode64_io_iterator( file )
     -- to break data into proper pieces for building the original string.
     --
     local function enummerate( file )
+        local sc=string.char
         local ll="" -- last line storage
 
         -- Read a "reasonable amount" of data into the line buffer. Line by
@@ -474,7 +479,7 @@ local function decode64_io_iterator( file )
             for a,b,c,d in cl:gmatch( gmatch_run ) do
                 coroutine.yield
                 (
-                    string.char( u64( a:byte(), b:byte(), c:byte(), d:byte() ) )
+                    sc( u64( a:byte(), b:byte(), c:byte(), d:byte() ) )
                 )
             end
             -- Set last line for next iteration
@@ -535,6 +540,8 @@ end
 -- output.
 --
 local function decode64_with_predicate( raw, out )
+    local sc=string.char
+
     if tail_padd64[2] ~= "" then
         -- Scan through the input string for four character sequences that
         -- match the rules for base64 encoding. The gmatch_run pattern skips
@@ -548,7 +555,7 @@ local function decode64_with_predicate( raw, out )
         -- string and finally this string is sent to the output predicate.
         --
         for a, b, c, d in raw:gmatch( gmatch_run ) do
-            out( string.char( u64( a:byte(), b:byte(), c:byte(), d:byte() ) ) )
+            out( sc( u64( a:byte(), b:byte(), c:byte(), d:byte() ) ) )
         end
 
         -- For extra long strings, the find pattern is not very fast so use
@@ -568,7 +575,7 @@ local function decode64_with_predicate( raw, out )
         end
     else
         for i=1,#raw-#raw%4,4 do
-            out( string.char( u64( raw:byte(i), raw:byte(i+1), raw:byte(i+2), raw:byte(i+3) ) ) )
+            out( sc( u64( raw:byte(i), raw:byte(i+1), raw:byte(i+2), raw:byte(i+3) ) ) )
         end
 
         if     #raw%4 == 3 then decode_tail64( out, raw:sub(-3,-3), raw:sub(-2,-2), raw:sub(-1,-1) )
