@@ -12,11 +12,11 @@
 --      encode      String in / out
 --      decode      String in / out
 --
---      encode_     String, function(value) predicate
---      decode_     String, function(value) predicate
+--      encode      String, function(value) predicate
+--      decode      String, function(value) predicate
 --
---      _encode_    iterator_64 in, function(value) predicate
---      _decode_    64_iterator in, function(value) predicate
+--      encode      iterator_64 in, function(value) predicate
+--      decode      64_iterator in, function(value) predicate
 --      encode_ii   creates an io read iterator for input
 --      decode_ii   creates a string iterator (slightly slower)
 --

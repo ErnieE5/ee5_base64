@@ -39,7 +39,7 @@ More Examples:
 ```lua
 base64=require("base64")
 ii=base64.encode_ii(io.stdin)
-base64._encode_(ii,function(s) io.write(s) end)
+base64.encode(ii,function(s) io.write(s) end)
 ```
 ```bash
 lua test.lua < base64.lua
@@ -83,7 +83,7 @@ end
 f=io.open("base64.lua")
 s=f:read("*a")
 f:close()
-base64.encode_(s,linespliter())
+base64.encode(s,linespliter())
 ```
 **Output:**
 ```
