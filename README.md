@@ -1,27 +1,25 @@
 lua_base64
 ==========
+Lua 5.2 base64 encoding and decoding
 
-Lua base64 encoding and decoding (Lua 5.2)
+This module is written for Lua 5.2 and likely could be used in 5.1 using the LuaRocks bit32 back port. **I** have not tested on 5.1 and likely never will.
 
-I was looking for some "native to Lua" base64 encoding and decoding routines
-and didn't find any that were "fast enough." With Lua 5.2 and the new bit32
-routines I suspected that a better job could be done. The best routine I found
-really used a bunch of memory. For an 800K file, over 6.5M was needed for an
-intermediate value. For my use, this was way too much. The alternative of
-doing a popen("base64") was considered, but isn't overly portable.  Speed was
-an issue when 800K files took over 2 full seconds.
+This module "exports" 5 methods with various "overloads" that allow interaction with the encoding / decoding routines. Default is to encode and decode as RFC 2045. The implementation is not strict 2045. _Line breaking is the responsibility of the user._
 
-This module "exports" 5 methods with various "overloads" that allow
-interaction with the encoding / decoding routines. Default is to encode and
-decode as RFC 2045 (Ignores max line length restrictions). The input and
-output in this mode is generally compatible with the GNU base64 application.
+The 'base64 RFC 2045' encoding is tested against base64 (GNU coreutils) 8.22 & 8.13 and _can_ produce identical output (including line breaks, if _you_ write the data that way).
 
-**Tested against base64 (GNU coreutils) 8.22 & 8.13.**
+__Use as you will.__ No warranty. (What do you expect for "free stuff" you find on the web?) **I'd like to know if others find this useful**, but other than that, meh.
+
+-----
+
+####_Why?_ (yet another Lua base64 converter)
+I was looking for some "natual Lua" base64 encoding routines and didn't find any "fast enough." The project this was written for runs on three different platforms (OSX, Linux, ARM/x64) and would require 3 different binaries, so I wanted to KISS it. With Lua 5.2 and the bit32 library I suspected that a better job could be done. The best routine I found (prior to starting this version) used a considerable amount of memory. For an 800K file, over 6.5M was needed for an intermediate value. This was way too much. I considered popen("base64"), but this isn't easily portable.  Speed was an issue when 800K files took over 2 full seconds. So...
 
 
-###Basic Usage
+Basic Usage
+-----------
 
-The simplest is "string in" / "string out".
+Simplest is "string in / string out".
 
 ```lua
 base64=require("base64")
@@ -36,16 +34,7 @@ Dude! Where is my car???
 
 ]]--
 ```
-
-For "very large strings" this ~~may not be~~ is not the best use of the
-library.
-> In fact, I likely wouldn't encourage using these routines **at all**
-for large strings. A Lua c-module will handle this _considerably_ faster. Just
-"for fun" I ran a 600M file through base64 and this utility. 0m3.306s vs
-8m13.139s. It is plausible that base64 spun multiple threads, but I suspect
-that the real reason is that all of the "over head" of a function call vs an
-extremely tight and optimized C routine is the real factor. Granted, this is a
-perverse example.
+> I don't encourage using these routines (**at all**) for large strings. A Lua c-module will handle this _considerably_ faster. Just "for fun" I ran a 600M file through base64 and this utility. 0m3.306s vs **8m**13.139s! It is plausible that base64 spun multiple threads, but I suspect that the real reason is that all of the "overhead" of a function call vs an extremely tight and optimized C routine is the real factor. (this is a perverse example, it annoys me no end that base64 even _exists_)
 
 
 ###More Examples:
@@ -65,7 +54,7 @@ LS1bWyoqKioqKioqKio ... dGVyYXRvcgp9Cg==
 ]]--
 ```
 
-#### output predicate
+#### Output predicate
 ```lua
 o={}
 base64.encode("Encode this please",function(s) o[#o+1]=s end)
@@ -85,7 +74,7 @@ end
 ]]--
 ```
 
-#### output predicate
+#### Line splitting
 ```lua
 function linespliter()
     local c = 0
@@ -117,7 +106,7 @@ Cg==
 ```
 
 
-#### garbled input
+#### Garbled input
 ```lua
 -- Mess with the input "V2hhdCBpcyB0aGlzPwo="
 s="V 2 h h d C Bp c y(((@!!!!\n\n\r\t\tB0aGlzPwo=           :-)     ?"
@@ -143,7 +132,7 @@ o:close()
 --[[ No output ]]--
 ```
 
-####custom alphabet
+####Custom alphabet
 ```lua
 base64.alpha("~`!1@2#3$4%\t6^7&8*9(0)_-+={[}]|\\:;'<D,./?qwertyuioplkjhgfdsazxcv","")
 s=base64.encode("User base64 encoding, no term chars")
@@ -157,3 +146,4 @@ User base64 encoding, no term chars
 
 ]]--
 ```
+![Ernie](http://ee5.net/ernie.png "Ernie")
