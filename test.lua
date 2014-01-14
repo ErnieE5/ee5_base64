@@ -2,8 +2,6 @@
 
 require("util")
 
-package.path="/Users/ErnieE/lua_base64/?.lua;"..package.path
-
 base64=require("base64")
 
 
