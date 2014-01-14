@@ -30,8 +30,37 @@
 --
 --  History:
 --      2014/01/13 Original implementation
---      2014/01/13 Performance enhancments
+--      2014/01/13 Performance enhancements & other base64 variants
+--
 
+
+--------------------------------------------------------------------------------
+-- known_base64_alphabets
+--
+--
+--  Table containing pre-calculated "constant" modifications to the encode /
+--  decode routines.
+--
+local known_base64_alphabets=
+{
+    base64= -- RFC 2045 (Ignores max line length restrictions)
+    {
+        _alpha="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/",
+        _run="[^%a%d%+%/]-([%a%d%+%/])",
+        _end="[^%a%d%+%/%=]-([%a%d%+%/%=])",
+        _strip="[^%a%d%+%/%=]",
+        _term="="
+    },
+
+    base64url=
+    {
+        _alpha="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_",
+        _run="[^%a%d%-%_]-([%a%d%-%_])",
+        _end="[^%a%d%+%-%_=]-([%a%d%+%-%_=])",
+        _strip="[^%a%d%+%-%_=]",
+        _term=""
+    },
+}
 
 
 --[[**************************************************************************]]
@@ -388,19 +417,19 @@ local pattern_strip = "[^%a%d%+%/%=]"
 --  Send the end of stream bytes that didn't get decoded via the main loop.
 --
 local function decode_tail64( out, e1, e2 ,e3, e4 )
-    -- If the terminating char is = then padding is present
-    if e4 == "=" then
-        local n3 = 65
 
-        if e3 ~= "=" then
+    if tail_padd64[2] == "" or e4 == tail_padd64[2] then
+        local n3 = b64e[0]
+
+        if e3 ~= nil and e3 ~= tail_padd64[2] then
             n3 = e3:byte()
         end
 
         -- Unpack the six bit values into the 8 bit values
-        local b1, b2, b3 = u64( e1:byte(), e2:byte(), n3, 65 )
+        local b1, b2, b3 = u64( e1:byte(), e2:byte(), n3, b64e[0] )
 
         -- And add them to the res table
-        if e3 ~= "=" then
+        if e3 ~= nil then
             out( string.char( b1, b2, b3 ) )
         else
             out( string.char( b1, b2 ) )
@@ -452,9 +481,16 @@ local function decode64_io_iterator( file )
             ll = cl
         end
 
-        local _,_,e1,e2,e3,e4 = ll:find( find_end )
+        local e1,e2,e3,e4
 
-        decode_tail64( function(s) coroutine.yield( s ) end, e1, e2, e3, e4 )
+        if tail_padd64[2] ~= "" then _,_,e1,e2,e3,e4 = ll:find( find_end )
+        elseif #ll%4 == 3       then     e1,e2,e3    = ll:sub(-3,-3), ll:sub(-2,-2), ll:sub(-1,-1)
+        elseif #ll%4 == 2       then     e1,e2       = ll:sub(-2,-2), ll:sub(-1,-1)
+        elseif #ll%4 == 1       then     e1          = ll:sub(-1,-1)
+        end
+        if e1 ~= nil then
+            decode_tail64( function(s) coroutine.yield( s ) end, e1, e2, e3, e4 )
+        end
     end
 
     -- Returns an input iterator that is implemented as a coroutine. Each
@@ -498,35 +534,46 @@ end
 -- output.
 --
 local function decode64_with_predicate( raw, out )
-    -- Scan through the input string for four character sequences that
-    -- match the rules for base64 encoding. The gmatch_run pattern skips
-    -- white space and other non matching characters.
-    --
-    -- Each byte is converted to a bit pattern via b64d and then sent to
-    -- the unpack routine that splits each resulting six bit value set into
-    -- three full bytes.
-    --
-    -- The three full bytes are sent into string.char to build a result
-    -- string and finally this string is sent to the output predicate.
-    --
-    for a, b, c, d in raw:gmatch( gmatch_run ) do
-        out( string.char( u64( a:byte(), b:byte(), c:byte(), d:byte() ) ) )
-    end
+    if tail_padd64[2] ~= "" then
+        -- Scan through the input string for four character sequences that
+        -- match the rules for base64 encoding. The gmatch_run pattern skips
+        -- white space and other non matching characters.
+        --
+        -- Each byte is converted to a bit pattern via b64d and then sent to
+        -- the unpack routine that splits each resulting six bit value set into
+        -- three full bytes.
+        --
+        -- The three full bytes are sent into string.char to build a result
+        -- string and finally this string is sent to the output predicate.
+        --
+        for a, b, c, d in raw:gmatch( gmatch_run ) do
+            out( string.char( u64( a:byte(), b:byte(), c:byte(), d:byte() ) ) )
+        end
 
-    -- For extra long strings, the find pattern is not very fast so use
-    -- a negative index. This runs the risk that a perversely terminated
-    -- (but still valid) base64 encoding can fail. This risk is considered
-    -- acceptable vs doing a pre-conversion gsub to remove invalid data.
-    -- This is to avoid creating a copy of the string.
-    --
-    local e1, e2, e3, e4
-    if raw:len() > 100 then
-        _,_, e1, e2, e3, e4 = raw:find( find_end, -100 )
+        -- For extra long strings, the find pattern is not very fast so use
+        -- a negative index. This runs the risk that a perversely terminated
+        -- (but still valid) base64 encoding can fail. This risk is considered
+        -- acceptable vs doing a pre-conversion gsub to remove invalid data.
+        -- This is to avoid creating a copy of the string.
+        --
+        local e1, e2, e3, e4
+        if raw:len() > 100 then
+            _,_, e1, e2, e3, e4 = raw:find( find_end, -100 )
+        else
+            _,_, e1, e2, e3, e4 = raw:find( find_end )
+        end
+
+        decode_tail64( out, e1, e2, e3, e4 )
     else
-        _,_, e1, e2, e3, e4 = raw:find( find_end )
-    end
+        for i=1,#raw-#raw%4,4 do
+            out( string.char( u64( raw:byte(i), raw:byte(i+1), raw:byte(i+2), raw:byte(i+3) ) ) )
+        end
 
-    decode_tail64( out, e1, e2, e3, e4 )
+        if     #raw%4 == 3 then decode_tail64( out, raw:sub(-3,-3), raw:sub(-2,-2), raw:sub(-1,-1) )
+        elseif #raw%4 == 2 then decode_tail64( out, raw:sub(-2,-2), raw:sub(-1,-1) )
+        elseif #raw%4 == 1 then decode_tail64( out, raw:sub(-1,-1) )
+        end
+    end
 end
 
 
@@ -550,19 +597,152 @@ local function decode64_tostring( raw )
 end
 
 
+--------------------------------------------------------------------------------
+-- set_and_get_alphabet
+--
+--  Sets and returns the encode / decode alphabet.
+--
+--
+local function set_and_get_alphabet(alpha,term)
+
+    local magic=
+    {
+--        ["%"]="%%",
+        [" "]="% ",
+        ["^"]="%^",
+        ["$"]="%$",
+        ["("]="%(",
+        [")"]="%)",
+        ["."]="%.",
+        ["["]="%[",
+        ["]"]="%]",
+        ["*"]="%*",
+        ["+"]="%+",
+        ["-"]="%-",
+        ["?"]="%?",
+    }
+
+    a=known_base64_alphabets[alpha]
+    if a == nil then
+        a={ _alpha=alpha, _term=term }
+    end
+
+    assert( #a._alpha == 64,    "The alphabet ~must~ be 64 unique values."  )
+    assert( #a._term   <  1,    "Specify zero or one termination character.")
+
+    b64d={}
+    b64e={}
+    local s=""
+    for i = 1,64 do
+        local byte = a._alpha:byte(i)
+        local str  = string.char(byte)
+        b64e[i-1]=byte
+        assert( b64d[byte] == nil, "Duplicate value '"..str.."'" )
+        b64d[byte]=i-1
+        s=s..str
+    end
+    if a._term ~= "" then
+        tail_padd64[1]=string.char(a._term:byte(),a._term:byte())
+        tail_padd64[2]=string.char(a._term:byte())
+    else
+        tail_padd64[1]=""
+        tail_padd64[2]=""
+    end
+
+
+    if not a._run then
+        local p=s:gsub("%%",function (s) return "__unique__" end)
+        for k,v in pairs(magic)
+        do
+            p=p:gsub(v,function (s) return magic[s] end )
+        end
+        a._run=p:gsub("__unique__",function() return "%%" end)
+        if magic[a._term] ~= nil then
+            a._term=a._term:gsub(magic[a._term],function (s) return magic[s] end)
+        end
+        if a._term == "%" then a._term = "%%" end
+
+        pattern_run     = string.format("[^%s]-([%s])",a._run,a._run)
+        pattern_end     = string.format("[^%s%s]-([%s%s])",a._run,a._term,a._run,a._term)
+        pattern_strip   = string.format("[^%s%s]",a._run,a._term)
+    else
+        assert( a._end   )
+        assert( a._strip )
+        pattern_run   = a._run
+        pattern_end   = a._end
+        pattern_strip = a._strip
+    end
+
+    gmatch_run  = pattern_run..pattern_run..pattern_run..pattern_run
+
+    if a._term ~= "" then
+        find_end = string.format(".*%s%s%s([%s]).*$",pattern_end,pattern_end,pattern_end,a._term)
+    else
+        find_end = string.format(".*%s%s%s%s.*$",pattern_end,pattern_end,pattern_end,pattern_end)
+    end
+
+    local c =0 for i in pairs(b64d) do c=c+1 end
+
+    assert( a._alpha == s,              "Integrity error." )
+    assert( c == 64,                    "The alphabet must be 64 unique values." )
+    if a._term ~= "" then
+    assert( not a._alpha:find(a._term), "Tail characters must not exist in alphabet." )
+    end
+
+    return s,a._term
+end
+
+
+--------------------------------------------------------------------------------
+-- encode64
+--
+--  Entry point mode selector.
+--
+--
+local function encode64(i,o)
+    if type(i) == "table" then
+        assert( type(o) == "function", "input iterator requires output predicate")
+        encode64_with_ii(i,o)
+    elseif type(i) == "string" then
+        if type(o) == "function" then
+            encode64_with_predicate(i,o)
+        else
+            assert( o == nil, "unsupported request")
+            encode64_tostring(i)
+        end
+    end
+end
+
+
+--------------------------------------------------------------------------------
+-- decode64
+--
+--  Entry point mode selector.
+--
+--
+local function decode64(i,o)
+    if type(i) == "table" then
+        assert( type(o) == "function", "input iterator requires output predicate")
+        decode64_with_ii(i,o)
+    elseif type(i) == "string" then
+        if type(o) == "function" then
+            decode64_with_predicate(i,o)
+        else
+            assert( o == nil, "unsupported request")
+            decode64_tostring(i)
+        end
+    end
+end
+
+
 --[[**************************************************************************]]
 --[[******************************  Module  **********************************]]
 --[[**************************************************************************]]
 return
 {
-    encode      = encode64_tostring,
-    encode_     = encode64_with_predicate,
-    _encode_    = encode64_with_ii,
-
-    decode      = decode64_tostring,
-    decode_     = decode64_with_predicate,
-    _decode_    = decode64_with_ii,
-
+    encode      = encode64,
+    decode      = decode64,
     encode_ii   = encode64_io_iterator,
     decode_ii   = decode64_io_iterator,
+    alpha       = set_and_get_alphabet,
 }

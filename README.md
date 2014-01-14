@@ -1,7 +1,7 @@
 lua_base64
 ==========
 
-Lua base64 encoding and decoding
+Lua base64 encoding and decoding (Lua 5.2)
 
 I was looking for some "native to Lua" base64 encoding and decoding routines
 and didn't find any that were "fast enough." With Lua 5.2 and the new bit32
