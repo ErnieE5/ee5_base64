@@ -37,9 +37,15 @@ Dude! Where is my car???
 ]]--
 ```
 
-For "very large strings" this may not be the best way to use the library.
-> In fact, I likely wouldn't encourage using these routines **all the time**
-for large strings. A Lua c-module will handle this _considerably_ faster.
+For "very large strings" this ~~may not~~ is not be the best way to use the
+library.
+> In fact, I likely wouldn't encourage using these routines **at all**
+for large strings. A Lua c-module will handle this _considerably_ faster. Just
+"for fun" I ran a 600M file through base64 and this utility. 0m3.306s vs
+8m13.139s. It is plausible that base64 spun multiple threads, but I suspect
+that the real reason is that all of the "over head" of a function call vs an
+extremely tight and optimized C routine is the real factor. Granted, this is a
+perverse example.
 
 
 ###More Examples:
