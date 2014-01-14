@@ -192,7 +192,7 @@ local function encode64_io_iterator(file)
         -- nil, nil. If one or two "overflow" bytes exist, return those.
         --
         local x,y
-        if #s > 0 then
+        if s ~= nil and #s > 0 then
             x = s:byte(1)
             if #s > 1 then
                 y = s:byte(2)
