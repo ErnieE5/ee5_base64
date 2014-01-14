@@ -105,3 +105,27 @@ print(base64.decode(s))
 ```output
 What is this?
 ```
+
+####url "safe"
+```lua
+base64.alpha("base64url")
+i=io.open("foo")
+o=io.open("bar","w")
+o:write(base64.encode(i:read("*a")))
+i:close()
+o:close()
+```
+
+####custom alpha
+```lua
+base64.alpha("~`!1@2#3$4%\t6^7&8*9(0)_-+={[}]|\\:;'<D,./?qwertyuioplkjhgfdsazxcv","")
+s=base64.encode("User base64 encoding, no term chars")
+print(s)
+print(base64.decode(s))
+```
+**Output:**
+```output
+)-^,}'`'+-^,^<8:=_d<[h*q[.}r$#du$3*,}.k:+h;;}/6
+User base64 encoding, no term chars
+```
+

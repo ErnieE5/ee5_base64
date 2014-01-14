@@ -629,7 +629,7 @@ local function set_and_get_alphabet(alpha,term)
         end
 
         assert( #c_alpha._alpha == 64,    "The alphabet ~must~ be 64 unique values."  )
-        assert( #c_alpha._term   <  1,    "Specify zero or one termination character.")
+        assert( #c_alpha._term  <=  1,    "Specify zero or one termination character.")
 
         b64d={}
         b64e={}
@@ -658,7 +658,7 @@ local function set_and_get_alphabet(alpha,term)
                 p=p:gsub(v,function (s) return magic[s] end )
             end
             c_alpha._run=p:gsub("__unique__",function() return "%%" end)
-            if magic[a._term] ~= nil then
+            if magic[c_alpha._term] ~= nil then
                 c_alpha._term=c_alpha._term:gsub(magic[c_alpha._term],function (s) return magic[s] end)
             end
             if c_alpha._term == "%" then c_alpha._term = "%%" end
