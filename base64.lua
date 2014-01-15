@@ -109,16 +109,30 @@ local tail_padd64=
 --  Helper function to convert three eight bit values into four ASCII
 --  encoded base64 values.
 --
---  Creating a local reference to the method shaves off a hash lookup
-local ext = bit32.extract
-local bnd = bit32.band
+--                 7             0 7             0 7             0
+--             m64(a a a a a a a a,b b b b b b b b,c c c c c c c c)
+--                 |           |           |           |
+--  return    [    a a a a a a]|           |           |
+--                        [    a a b b b b]|           |
+--                                    [    b b b b c c]|
+--                                                [    c c c c c c]
+--
+local ext = bit32.extract -- slight speed, vast visual (IMO)
+
 local function m64( a, b, c )
 
-    return
-        b64e[ ext( a, 2, 6 ) ],
-        b64e[ ext( a, 0, 2 )*16 + ext(b, 4, 4) ],
-        b64e[ ext( b, 0, 4 )*4  + ext(c, 6, 2) ],
-        b64e[ bnd( c, 0x3f) ]
+    -- Extraction (ext) combines the mask and shift into a single call, halving
+    -- the overhead. The simple math is slightly quicker than a method call to
+    -- shift the middle bits out. A simple mask is all that is needed for the
+    -- lookup.
+    --
+    -- Each extracted value is then mapped against the alphabet values to
+    -- return the quadruple of chars for the output.
+    --
+    return  b64e[ ext( a, 2, 6 )                   ],
+            b64e[ ext( a, 0, 2 )*16 + ext(b, 4, 4) ],
+            b64e[ ext( b, 0, 4 )*4  + ext(c, 6, 2) ],
+            b64e[ ext( c, 0, 6 )                   ]
 end
 
 
@@ -331,11 +345,11 @@ local function encode64_tostring(raw)
     -- Tests with an 820K string in memory. Result is 1.1M of data.
     --      Lua         Lua         base64
     --      predicate   iterator    (gnu 8.21)
-    --      0.373s      0.426s      0.054s
-    --      0.375s      0.430s      0.048s
-    --      0.374s      0.419s      0.050s
-    --      0.359s      0.426s      0.042s
-    --      0.370s      0.428s      0.046s
+    --      349ms       406ms       54ms
+    --      357ms       401ms       48ms
+    --      352ms       400ms       50ms
+    --      355ms       403ms       42ms
+    --      352ms       402ms       46ms
     --
     encode64_with_predicate( raw, collection_predicate )
     --encode64_with_ii( encode64_string_iterator( raw ), collection_predicate )
@@ -380,22 +394,46 @@ local b64d=
 --  bit values. Input values are the integer expression of the six bit value
 --  encoded in the original base64 encoded string.
 --
+--     u64( _ _1 1 1 1 1 1,
+--             |       _ _ 2 2 2 2 2 2,
+--             |           |       _ _ 3 3 3 3 3 3,
+--             |           |           |       _ _ 4 4 4 4 4 4)
+--             |           |           |           |
+--  return ', [1 1 1 1 1 1 2 2]        |           |
+--         ',                 [2 2 2 2 3 3 3 3]    |
+--         '                                  [3 3 4 4 4 4 4 4]
+--
 local function u64( b1, b2, b3, b4 )
-    -- Shift the four six bit values into the byte pattern for the three
-    -- full eight bit values
-    --
-    local cvt=bit32.lshift(b64d[ b1 ], 18) +
-              bit32.lshift(b64d[ b2 ], 12) +
-              bit32.lshift(b64d[ b3 ],  6) +
-                           b64d[ b4 ]
 
-    -- Return the three full eight bit values that are the raw data
+    -- This is messy looking, but slightly faster than the more "clear" version
+    -- below. 1.1M -> 820K  435ms vs 570ms
+    --
+    -- Each comment shows the rough C expression that would be used to generate
+    -- the returned triple.
     --
     return
-        bit32.band( bit32.rshift(cvt,16), 0xff ),
-        bit32.band( bit32.rshift(cvt, 8), 0xff ),
-        bit32.band( cvt, 0xff )
+        -- ([b1]<<2) | ([b2] & 0x30) >> 4
+        --
+        b64d[b1]*4 + b64d[b2]/16,
+
+        -- ([b2]&0x0F)<<4) | (([b3] & 0x3c)>>2)
+        --
+        ext( b64d[b2], 0, 4 )*16 + b64d[b3]/4,
+
+        -- [b4] | ([b3]&0x03)<<6)
+        --
+        b64d[b4] + ext( b64d[b3], 0, 2 ) * 64
+
+    -- local cvt=bit32.lshift(b64d[ b1 ], 18) +
+    --           bit32.lshift(b64d[ b2 ], 12) +
+    --           bit32.lshift(b64d[ b3 ],  6) +
+    --                        b64d[ b4 ]
+    -- return
+    --     bit32.band( bit32.rshift(cvt,16), 0xff ),
+    --     bit32.band( bit32.rshift(cvt, 8), 0xff ),
+    --     bit32.band( cvt, 0xff )
 end
+
 
 -- pattern_run is the base expression to strip four "valid"
 -- characters from the input used by gmatch_run
