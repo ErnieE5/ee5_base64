@@ -94,6 +94,14 @@ local b64e=
     [54]= 50, [55]= 51, [56]= 52, [57]= 53, [58]= 54, [59]= 55,
     [60]= 56, [61]= 57, [62]= 43, [63]= 47
 }
+-- Precomputed tables
+local b64e_a  -- ready to use
+local b64e_a2 -- byte addend
+local b64e_b1 -- byte addend
+local b64e_b2 -- byte addend
+local b64e_c1 -- byte addend
+local b64e_c  -- ready to use
+
 
 -- Tail padding values
 local tail_padd64=
@@ -119,22 +127,28 @@ local tail_padd64=
 --
 local ext = bit32.extract -- slight speed, vast visual (IMO)
 
-local function m64( a, b, c )
-
+local function m64_normal( a, b, c )
     -- Extraction (ext) combines the mask and shift into a single call, halving
     -- the overhead. The simple math is slightly quicker than a method call to
     -- shift the middle bits out. A simple mask is all that is needed for the
     -- lookup.
-    --
+
     -- Each extracted value is then mapped against the alphabet values to
     -- return the quadruple of chars for the output.
-    --
+
     return  b64e[ ext( a, 2, 6 )                   ],
             b64e[ ext( a, 0, 2 )*16 + ext(b, 4, 4) ],
             b64e[ ext( b, 0, 4 )*4  + ext(c, 6, 2) ],
             b64e[ ext( c, 0, 6 )                   ]
 end
 
+local function m64_faster( a, b, c )
+    return  b64e_a[a],
+            b64e[ b64e_a2[a]+b64e_b1[b] ],
+            b64e[ b64e_b2[b]+b64e_c1[c] ],
+            b64e_c[c]
+end
+m64=m64_faster
 
 --------------------------------------------------------------------------------
 -- encode_tail64
@@ -345,11 +359,11 @@ local function encode64_tostring(raw)
     -- Tests with an 820K string in memory. Result is 1.1M of data.
     --      Lua         Lua         base64
     --      predicate   iterator    (gnu 8.21)
-    --      349ms       406ms       54ms
-    --      357ms       401ms       48ms
-    --      352ms       400ms       50ms
-    --      355ms       403ms       42ms
-    --      352ms       402ms       46ms
+    --      243ms       290ms       54ms
+    --      243ms       284ms       48ms
+    --      245ms       288ms       50ms
+    --      245ms       289ms       42ms
+    --      246ms       292ms       46ms
     --
     encode64_with_predicate( raw, collection_predicate )
     --encode64_with_ii( encode64_string_iterator( raw ), collection_predicate )
@@ -689,6 +703,23 @@ local function set_and_get_alphabet(alpha,term)
             b64d[byte]=i-1
             s=s..str
         end
+
+        b64e_a ={}
+        b64e_a2={}
+        b64e_b1={}
+        b64e_b2={}
+        b64e_c1={}
+        b64e_c ={}
+
+        for f = 0,255 do
+            b64e_a  [f]=b64e[ext(f,2,6)]
+            b64e_a2 [f]=ext(f,0,2)*16
+            b64e_b1 [f]=ext(f,4,4)
+            b64e_b2 [f]=ext(f,0,4)*4
+            b64e_c1 [f]=ext(f,6,2)
+            b64e_c  [f]=b64e[ext(f,0,6)]
+        end
+
         if c_alpha._term ~= "" then
             tail_padd64[1]=string.char(c_alpha._term:byte(),c_alpha._term:byte())
             tail_padd64[2]=string.char(c_alpha._term:byte())
@@ -793,6 +824,7 @@ local function decode64(i,o)
     end
 end
 
+set_and_get_alphabet("base64")
 
 --[[**************************************************************************]]
 --[[******************************  Module  **********************************]]
@@ -805,3 +837,4 @@ return
     decode_ii   = decode64_io_iterator,
     alpha       = set_and_get_alphabet,
 }
+
