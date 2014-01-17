@@ -2,18 +2,18 @@ lua_base64
 ==========
 Lua 5.2 base64 encoding and decoding
 
-This module is written for Lua 5.2 and likely could be used in 5.1 using the LuaRocks bit32 back port. **I** have not tested on 5.1 and likely never will.
+This module is written for Lua 5.2 and likely could be used in 5.1 using the [LuaRocks](http://luarocks.org/) [bit32](https://raw.github.com/hishamhm/lua-compat-5.2/bitlib-5.2.2/lbitlib.c) back port. **I** have not tested on 5.1 and likely never will.
 
 This module "exports" 5 methods with various "overloads" that allow interaction with the encoding / decoding routines. Default is to encode and decode as RFC 2045. The implementation is not strict 2045. _Line breaking is the responsibility of the user._
 
-The 'base64 RFC 2045' encoding is tested against base64 (GNU coreutils) 8.22 & 8.13 and _can_ produce identical output (including line breaks, if _you_ write the data that way).
+The "base64 RFC 2045" encoding is tested against base64 (GNU coreutils) 8.22 & 8.13 and _can_ produce identical output (including line breaks, if _you_ write the data that way).
 
 __Use as you will.__ No warranty. (What do you expect for "free stuff" you find on the web?) **I'd like to know if others find this useful**, but other than that, meh.
 
 -----
 
-####_Why?_ (yet another Lua base64 converter)
-I was looking for some "natural Lua" base64 encoding routines and didn't find any "fast enough." The project this was written for runs on three different platforms (OSX, Linux, ARM/x64) and would require 3 different binaries, so I wanted to KISS it. With Lua 5.2 and the bit32 library I suspected that a better job could be done. The best routine I found (prior to starting this version) used a considerable amount of memory. For an 800K file, over 6.5M was needed for an intermediate value. This was way too much. I considered popen("base64"), but this isn't easily portable.  Speed was an issue when 800K files took over 2 full seconds. So...
+####_Why?_ (yet _another_ Lua base64 converter)
+I was looking for some "natural Lua" base64 encoding routines and didn't find any "fast enough." The project this was written for runs on three different platforms (OSX, Linux, ARM/x64) and would require 3 different binaries, so I wanted to KISS it. With Lua 5.2 and the bit32 library I suspected that a better job could be done. The best routine I found (prior to starting this version) used a considerable amount of memory. For an 818K file, over 6.5M was needed for an intermediate value. This was way too much. I considered popen("base64"), but this isn't easily portable.  Speed was an issue when 818K files took over 2 full seconds. So...
 
 
 Basic Usage
@@ -146,4 +146,63 @@ User base64 encoding, no term chars
 
 ]]--
 ```
+#Timing
+These numbers reflect the _encoding_ of an __818K__ file read into a buffer and written to stdout. The tests are run under OS X 10.9.1 with a 2.6 GHz Intel Core i7. 16 GB of memory is available with limited background processing. Each test is run five times. Decoding (tests not shown here) is a _little_ slower mostly because of input sanitation. The _idea_ behind the test_encode.lua script is below. In actuality, the same file was used each time and contains ALL THREE version of the code as startup processing overhead. (The difference is negligible, but I kept the overhead identical for all tests to be fair.)
+
+```lua
+--[[ test_encode.lua ]]
+base64=require("base64")
+f=io.open("818KDataFile")
+d=f:read("*a")
+f:close()
+e=base64.encode(d)
+io.write(e)
+```
+
+
+```Textile
+$ lua -v
+Lua 5.2.3  Copyright (C) 1994-2013 Lua.org, PUC-Rio
+$ ls
+-rw-r--r-- 1 Ernie Ewert staff 818K 2014-01-16 21:07 818KDataFile
+-rwxr-xr-x 1 Ernie Ewert staff 9.6K 2014-01-16 21:02 test_encode.lua
+-rw-r--r-- 1 Ernie Ewert staff 1.1M 2014-01-16 21:10 dataout.b64
+```
+
+[ErnieE5/lua_base64 (this library)](https://github.com/ErnieE5/lua_base64)
+```Textile
+$ time lua test_encode.lua > dataout.b64 # repeat 5 times
+
+real    0m0.255s
+real    0m0.243s
+real    0m0.256s
+real    0m0.248s
+real    0m0.251s
+```
+
+
+[paulmoore/base64.lua (Paul Moore)](https://gist.github.com/paulmoore/2563975) __Modified to use the bit32 library in 5.2__
+```Textile
+$ time lua test_encode.lua > dataout.b64 # repeat 5 times
+
+real    0m1.351s
+real    0m1.360s
+real    0m1.353s
+real    0m1.368s
+real    0m1.372s
+```
+
+
+[Lua wiki (Alex Kloss)](http://lua-users.org/wiki/BaseSixtyFour)
+```Textile
+$ time lua test_encode.lua  > dataout.b64 # repeat 5 times
+
+real    0m2.443s
+real    0m2.391s
+real    0m2.413s
+real    0m2.401s
+real    0m2.406s
+```
+
+
 ![Ernie](http://ee5.net/ernie.png "Ernie")
