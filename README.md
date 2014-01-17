@@ -215,7 +215,7 @@ paulmoore/base64.lua    ~68MB       68558848  maximum resident set size
 Lua wiki                ~38MB       38924288  maximum resident set size
 
 ```
-I am not surprised at the Lua Wiki versions memory picture. I am was _stunned_ at the amount of memory consumed by Paul's version. In fact, looking into why his code churns so much memory gave MY code a huge boost in encode performance. (Almost 20% from the prior check-in, thanks Paul!) I wasn't clear on the string:byte() method usage and a simple change had a __huge__ impact. (The 'bytes' table in Paul's code is the input string as a table of bytes.)
+I am not surprised at the Lua Wiki versions memory picture. I was _stunned_ at the amount of memory consumed by Paul's version. In fact, looking into why his code churns so much memory gave MY code a huge boost in encode performance. (Almost 20% from the prior check-in, thanks Paul!) I wasn't clear on the string:byte() method usage and a simple change had a __huge__ impact. (The 'bytes' table in Paul's code is the input string as a table of bytes.)
 <br/>
 <br/>
 
