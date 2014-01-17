@@ -199,6 +199,7 @@ local function encode64_io_iterator(file)
 
     local ii = { } -- Table for the input iterator
     local s
+    local sb = string.byte
 
     -- Begin returns an input read iterator
     --
@@ -209,7 +210,7 @@ local function encode64_io_iterator(file)
         return function()
             s = file:read(3)
             if s ~= nil and #s == 3 then
-                return s:byte(1), s:byte(2), s:byte(3)
+                return sb(s,1,3)
             end
             return nil
         end
@@ -227,46 +228,6 @@ local function encode64_io_iterator(file)
             x = s:byte(1)
             if #s > 1 then
                 y = s:byte(2)
-            end
-        end
-        return x, y
-    end
-
-    return ii
-end
-
-
---------------------------------------------------------------------------------
--- encode64_string_iterator
---
---  This is a reference example of a encode string iterator. Encoding an
---  existing string using an iterator is ~slightly~ slower than using the
---  predicate version.
---
-local function encode64_string_iterator( raw )
-    local ii = { }      -- table for the input iterator
-    local rem=#raw%3    -- remainder
-    local len=#raw-rem  -- 3 byte input adjusted
-
-    local index = 1
-
-    function ii.begin()
-        return function()
-            index = index + 3
-            if index < len then
-                return raw:byte(index-3), raw:byte(index-2), raw:byte(index-1)
-            else
-                return nil
-            end
-        end
-    end
-
-    function ii.tail()
-        local x, y
-        if rem > 0 then
-            x = raw:byte(len+1)
-            if rem > 1 then
-                y = raw:byte(len+2)
             end
         end
         return x, y
@@ -307,8 +268,8 @@ end
 local function encode64_with_predicate( raw, out )
     local rem=#raw%3     -- remainder
     local len=#raw-rem   -- 3 byte input adjusted
-    local sb=string.byte -- Mostly notational
-    local sc=string.char -- Mostly notational
+    local sb=string.byte -- Mostly notational (slight performance)
+    local sc=string.char -- Mostly notational (slight performance)
 
     -- Main encode loop converts three input bytes to 4 base64 encoded
     -- ACSII values and calls the predicate with the value.
@@ -316,9 +277,9 @@ local function encode64_with_predicate( raw, out )
         -- This really isn't intended as obfuscation. It is more about
         -- loop optimization and removing temporaries.
         --
-        out( sc( m64( sb( raw ,i ), sb( raw, i+1 ), sb( raw, i+2 ) ) ) )
-        --   |   |    |             |               |
-        --   |   |    byte 1        byte 2          byte 3
+        out( sc( m64( sb( raw ,i , i+3 ) ) ) )
+        --   |   |    |
+        --   |   |    byte i to i + 3
         --   |   |
         --   |   returns 4 encoded values
         --   |
@@ -353,20 +314,16 @@ local function encode64_tostring(raw)
         sb[#sb+1]=v
     end
 
-    -- Encoding with the predicate is slightly faster than using the
-    -- string iterator and is used preferentially.
+    -- Test with an 818K string in memory. Result is 1.1M of data.
     --
-    -- Tests with an 820K string in memory. Result is 1.1M of data.
-    --      Lua         Lua         base64
-    --      predicate   iterator    (gnu 8.21)
-    --      243ms       290ms       54ms
-    --      243ms       284ms       48ms
-    --      245ms       288ms       50ms
-    --      245ms       289ms       42ms
-    --      246ms       292ms       46ms
+    --      lua_base64      base64 (gnu 8.21)
+    --      202ms           54ms
+    --      203ms           48ms
+    --      204ms           50ms
+    --      203ms           42ms
+    --      205ms           46ms
     --
     encode64_with_predicate( raw, collection_predicate )
-    --encode64_with_ii( encode64_string_iterator( raw ), collection_predicate )
 
     return table.concat(sb)
 end
@@ -627,7 +584,7 @@ local function decode64_with_predicate( raw, out )
         end
     else
         for i=1,#raw-#raw%4,4 do
-            out( sc( u64( raw:byte(i), raw:byte(i+1), raw:byte(i+2), raw:byte(i+3) ) ) )
+            out( sc( u64( raw:byte(i,i+3) ) ) )
         end
 
         if     #raw%4 == 3 then decode_tail64( out, raw:sub(-3,-3), raw:sub(-2,-2), raw:sub(-1,-1) )
