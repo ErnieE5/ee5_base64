@@ -34,22 +34,26 @@ local known_base64_alphabets=
     base64= -- RFC 2045 (Ignores max line length restrictions)
     {
         _alpha="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/",
-        _run="[^%a%d%+%/]-([%a%d%+%/])",
-        _end="[^%a%d%+%/%=]-([%a%d%+%/%=])",
         _strip="[^%a%d%+%/%=]",
         _term="="
+    },
+
+    base64noterm= -- RFC 2045 (Ignores max line length restrictions)
+    {
+        _alpha="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/",
+        _strip="[^%a%d%+%/]",
+        _term=""
     },
 
     base64url= -- RFC 4648 'base64url'
     {
         _alpha="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_",
-        _run="[^%a%d%-%_]-([%a%d%-%_])",
-        _end="[^%a%d%+%-%_=]-([%a%d%+%-%_=])",
         _strip="[^%a%d%+%-%_=]",
         _term=""
     },
 }
 local c_alpha=known_base64_alphabets.base64
+local pattern_strip
 
 --[[**************************************************************************]]
 --[[****************************** Encoding **********************************]]
@@ -135,14 +139,11 @@ local function encode_tail64( out, x, y )
     -- If we have a number of input bytes that isn't exactly divisible
     -- by 3 then we need to pad the tail
     if x ~= nil then
-        local r = 1
-        a = x
+        local a,b,r = x,0,1
 
         if y ~= nil then
-            b = y
             r = 2
-        else
-            b = 0
+            b = y
         end
 
         -- Encode three bytes of info, with the tail byte as zeros and
@@ -155,7 +156,7 @@ local function encode_tail64( out, x, y )
         local tail_value = string.char( b1, b2 )
 
         -- two remainder input bytes will need 18 output bits (2 as pad)
-        if y ~= nil then
+        if r == 2 then
             tail_value=tail_value..string.char( b3 )
         end
 
@@ -329,6 +330,12 @@ local b64d=
     [ 50]=54, [ 51]=55, [ 52]=56, [ 53]=57, [ 54]=58, [ 55]=59,
     [ 56]=60, [ 57]=61, [ 43]=62, [ 47]=63
 }
+-- Precomputed tables (compromise using more memory for speed)
+local b64d_a1 -- byte addend
+local b64d_a2 -- byte addend
+local b64d_b1 -- byte addend
+local b64d_b2 -- byte addend
+local b64d_c1 -- byte addend
 
 
 --------------------------------------------------------------------------------
@@ -348,42 +355,14 @@ local b64d=
 --         '                                  [3 3 4 4 4 4 4 4]
 --
 local function u64( b1, b2, b3, b4 )
-
-    -- Each comment shows the rough C expression that would be used to generate
-    -- the returned triple. We can get away with addition instead of anding the
-    -- values together because there are no overlapping bit patterns.
+    -- We can get away with addition instead of anding the values together
+    -- because there are no  overlapping bit patterns.
     --
     return
-        -- ([b1]<<2) | ([b2] & 0x30) >> 4
-        --
-        b64d[b1]*4 + b64d[b2]/16,
-
-        -- ([b2]&0x0F)<<4) | (([b3] & 0x3c)>>2)
-        --
-        ext( b64d[b2], 0, 4 )*16 + b64d[b3]/4,
-
-        -- [b4] | ([b3]&0x03)<<6)
-        --
-        b64d[b4] + ext( b64d[b3], 0, 2 ) * 64
+        b64d_a1[b1] + b64d_a2[b2],
+        b64d_b1[b2] + b64d_b2[b3],
+        b64d_c1[b3] + b64d[b4]
 end
-
-
--- pattern_run is the base expression to strip four "valid"
--- characters from the input used by gmatch_run
---
-local pattern_run   = "[^%a%d%+%/]-([%a%d%+%/])"
-local gmatch_run    = pattern_run..pattern_run..pattern_run..pattern_run
-
--- pattern_end is the foundation expression for matching
--- the end of a base64 encoded input
---
-local pattern_end   = "[^%a%d%+%/%=]-([%a%d%+%/%=])"
-local find_end      = ".*"..pattern_end..pattern_end..pattern_end.."[^%a%d%+%/%=]-([%=]).*$"
-
--- pattern_strip is used to filter "invalid" input from
--- partial strings used by input iterators
---
-local pattern_strip = "[^%a%d%+%/%=]"
 
 
 --------------------------------------------------------------------------------
@@ -393,18 +372,18 @@ local pattern_strip = "[^%a%d%+%/%=]"
 --
 local function decode_tail64( out, e1, e2 ,e3, e4 )
 
-    if tail_padd64[2] == "" or e4 == tail_padd64[2] then
+    if tail_padd64[2] == "" or e4 == tail_padd64[2]:byte() then
         local n3 = b64e[0]
 
-        if e3 ~= nil and e3 ~= tail_padd64[2] then
-            n3 = e3:byte()
+        if e3 ~= nil and e3 ~= tail_padd64[2]:byte() then
+            n3 = e3
         end
 
         -- Unpack the six bit values into the 8 bit values
-        local b1, b2 = u64( e1:byte(), e2:byte(), n3, b64e[0] )
+        local b1, b2 = u64( e1, e2, n3, b64e[0] )
 
         -- And add them to the res table
-        if e3 ~= nil and e3 ~= tail_padd64[2] then
+        if e3 ~= nil and e3 ~= tail_padd64[2]:byte() then
             out( string.char( b1, b2 ) )
         else
             out( string.char( b1 ) )
@@ -428,7 +407,9 @@ local function decode64_io_iterator( file )
     --
     local function enummerate( file )
         local sc=string.char
+        local sb=string.byte
         local ll="" -- last line storage
+        local len
 
         -- Read a "reasonable amount" of data into the line buffer. Line by
         -- line is not used so that a file with no line breaks doesn't
@@ -438,36 +419,45 @@ local function decode64_io_iterator( file )
             -- Reset the current line to contain valid chars and any previous
             -- "leftover" bytes from the previous read
             --
-            cl = ll:sub( #ll-#ll%4+1, #ll )..cl:gsub(pattern_strip,"")
-            --   |                           |
-            --   |                           Remove "Invalid" chars
-            --   |                           (white space etc)
+            cl = ll .. cl:gsub(pattern_strip,"")
+            --   |     |
+            --   |     Remove "Invalid" chars (white space etc)
+            --   |
             --   Left over from last line
             --
+            len = (#cl-4)-(#cl%4)
 
             -- see the comments in decode64_with_predicate for a rundown of
             -- the results of this loop (sans the coroutine)
-            for a,b,c,d in cl:gmatch( gmatch_run ) do
+            for i=1,len,4 do
                 coroutine.yield
                 (
-                    sc( u64( a:byte(), b:byte(), c:byte(), d:byte() ) )
+                    sc( u64( sb( cl, i, i+4 ) ) )
                 )
             end
-            -- Set last line for next iteration
-            ll = cl
+
+            ll = cl:sub( len +1, #cl )
         end
 
-        local e1,e2,e3,e4
+        local l = #ll
 
-        if tail_padd64[2] ~= "" then _,_,e1,e2,e3,e4 = ll:find( find_end )
-        elseif #ll%4 == 3       then     e1,e2,e3    = ll:sub(-3,-3), ll:sub(-2,-2), ll:sub(-1,-1)
-        elseif #ll%4 == 2       then     e1,e2       = ll:sub(-2,-2), ll:sub(-1,-1)
-        elseif #ll%4 == 1       then     e1          = ll:sub(-1,-1)
+        if l >= 4 and ll:sub(-1) ~= tail_padd64[2] then
+            coroutine.yield
+            (
+                sc( u64( sb( ll, 1, 4 ) ) )
+            )
+            l=l-4
         end
 
-        if e1 ~= nil then
-            decode_tail64( function(s) coroutine.yield( s ) end, e1, e2, e3, e4 )
+        if l > 0 then
+
+            local e1,e2,e3,e4 = ll:byte( 0 - l, -1 )
+
+            if e1 ~= nil then
+                decode_tail64( function(s) coroutine.yield( s ) end, e1, e2, e3, e4 )
+            end
         end
+
     end
 
     -- Returns an input iterator that is implemented as a coroutine. Each
@@ -479,6 +469,7 @@ local function decode64_io_iterator( file )
 
         return function()
             local code,res = coroutine.resume(co)
+            assert(code == true)
             return res
         end
     end
@@ -511,48 +502,23 @@ end
 -- output.
 --
 local function decode64_with_predicate( raw, out )
-    local sc=string.char
+    local san = raw:gsub(pattern_strip,"")
+    local len = #san-#san%4
+    local rem = #san-len
+    local sc  = string.char
+    local sb  = string.byte
 
-    if tail_padd64[2] ~= "" then
-        -- Scan through the input string for four character sequences that
-        -- match the rules for base64 encoding. The gmatch_run pattern skips
-        -- white space and other non matching characters.
-        --
-        -- Each byte is converted to a bit pattern via b64d and then sent to
-        -- the unpack routine that splits each resulting six bit value set into
-        -- three full bytes.
-        --
-        -- The three full bytes are sent into string.char to build a result
-        -- string and finally this string is sent to the output predicate.
-        --
-        for a, b, c, d in raw:gmatch( gmatch_run ) do
-            out( sc( u64( a:byte(), b:byte(), c:byte(), d:byte() ) ) )
-        end
+    if san:sub(-1,-1) == tail_padd64[2] then
+        rem = rem + 4
+        len = len - 4
+    end
 
-        -- For extra long strings, the find pattern is not very fast so use
-        -- a negative index. This runs the risk that a perversely terminated
-        -- (but still valid) base64 encoding can fail. This risk is considered
-        -- acceptable vs doing a pre-conversion gsub to remove invalid data.
-        -- This is to avoid creating a copy of the string.
-        --
-        local e1, e2, e3, e4
-        if raw:len() > 100 then
-            _,_, e1, e2, e3, e4 = raw:find( find_end, -100 )
-        else
-            _,_, e1, e2, e3, e4 = raw:find( find_end )
-        end
-        if e1 ~= nil then
-            decode_tail64( out, e1, e2, e3, e4 )
-        end
-    else
-        for i=1,#raw-#raw%4,4 do
-            out( sc( u64( raw:byte(i,i+3) ) ) )
-        end
+    for i=1,len,4 do
+        out( sc( u64( sb( san, i, i+4 ) ) ) )
+    end
 
-        if     #raw%4 == 3 then decode_tail64( out, raw:sub(-3,-3), raw:sub(-2,-2), raw:sub(-1,-1) )
-        elseif #raw%4 == 2 then decode_tail64( out, raw:sub(-2,-2), raw:sub(-1,-1) )
-        elseif #raw%4 == 1 then decode_tail64( out, raw:sub(-1,-1) )
-        end
+    if rem > 0 then
+        decode_tail64( out, sb( san, 0-rem, -1 ) )
     end
 end
 
@@ -623,12 +589,13 @@ local function set_and_get_alphabet(alpha,term)
             s=s..str
         end
 
-        b64e_a ={}
-        b64e_a2={}
-        b64e_b1={}
-        b64e_b2={}
-        b64e_c1={}
-        b64e_c ={}
+        -- preload encode lookup tables
+        b64e_a  = {}
+        b64e_a2 = {}
+        b64e_b1 = {}
+        b64e_b2 = {}
+        b64e_c1 = {}
+        b64e_c  = {}
 
         for f = 0,255 do
             b64e_a  [f]=b64e[ext(f,2,6)]
@@ -637,6 +604,24 @@ local function set_and_get_alphabet(alpha,term)
             b64e_b2 [f]=ext(f,0,4)*4
             b64e_c1 [f]=ext(f,6,2)
             b64e_c  [f]=b64e[ext(f,0,6)]
+        end
+
+        -- preload decode lookup tables
+        b64d_a1 = {}
+        b64d_a2 = {}
+        b64d_b1 = {}
+        b64d_b2 = {}
+        b64d_c1 = {}
+
+        for k,v in pairs(b64d) do
+            -- Each comment shows the rough C expression that would be used to
+            -- generate the returned triple.
+            --
+            b64d_a1 [k] = v*4                   -- ([b1]       ) << 2
+            b64d_a2 [k] = math.floor( v / 16 )  -- ([b2] & 0x30) >> 4
+            b64d_b1 [k] = ext( v, 0, 4 ) * 16   -- ([b2] & 0x0F) << 4
+            b64d_b2 [k] = math.floor( v / 4 )   -- ([b3] & 0x3c) >> 2
+            b64d_c1 [k] = ext( v, 0, 2 ) * 64   -- ([b3] & 0x03) << 6
         end
 
         if c_alpha._term ~= "" then
@@ -657,7 +642,7 @@ local function set_and_get_alphabet(alpha,term)
             esc_term=c_alpha._term
         end
 
-        if not c_alpha._run then
+        if not c_alpha._strip then
             local p=s:gsub("%%",function (s) return "__unique__" end)
             for k,v in pairs(magic)
             do
@@ -665,25 +650,12 @@ local function set_and_get_alphabet(alpha,term)
             end
             local mr=p:gsub("__unique__",function() return "%%" end)
 
-            c_alpha._run   = string.format("[^%s]-([%s])",mr,mr)
-            c_alpha._end   = string.format("[^%s%s]-([%s%s])",mr,esc_term,mr,esc_term)
             c_alpha._strip = string.format("[^%s%s]",mr,esc_term)
         end
 
-        assert( c_alpha._run   )
-        assert( c_alpha._end   )
         assert( c_alpha._strip )
 
-        pattern_run   = c_alpha._run
-        pattern_end   = c_alpha._end
         pattern_strip = c_alpha._strip
-        gmatch_run    = pattern_run..pattern_run..pattern_run..pattern_run
-
-        if esc_term ~= "" then
-            find_end = string.format(".*%s%s%s%s-([%s]).*$",pattern_end,pattern_end,pattern_end,pattern_strip,esc_term)
-        else
-            find_end = string.format(".*%s%s%s%s.*$",pattern_end,pattern_end,pattern_end,pattern_end)
-        end
 
         local c =0 for i in pairs(b64d) do c=c+1 end
 

@@ -8,6 +8,8 @@ This module "exports" 5 methods with various "overloads" that allow interaction 
 
 The "base64 RFC 2045" encoding is tested against base64 (GNU coreutils) 8.22 & 8.13 and _can_ produce identical output (including line breaks, if _you_ write the data that way).
 
+Decoding creates a duplicate copy of the input string to sanitize the input. Decoding is about 20% slower than encoding for standard alphabets. Custom alphabet decoding is considerably slower (almost 100%) because of the lack of predictable coherent patterns.
+
 __Use as you will.__ No warranty. (What do you expect for "free stuff" you find on the web?) **I'd like to know if others find this useful**, but other than that, meh.
 
 -----
@@ -227,8 +229,8 @@ The following results are based on the the tests above in the timing section. (s
 ErnieE5/lua_base64      ~16MB       15,888,384  maximum resident set size
 paulmoore/base64.lua    ~68MB       68,558,848  maximum resident set size
 Lua wiki                ~38MB       38,924,288  maximum resident set size
-
 ```
+
 >I am not surprised at the Lua Wiki versions memory picture. I was _stunned_ at the amount of memory consumed by Paul's version. In fact, looking into why his code churns so much memory gave MY code a boost in encode performance. (Almost 20% from the prior check-in, thanks Paul!) I wasn't clear on the string:byte() method usage and a simple change was helpful. (The 'bytes' table in Paul's code is the input string as a table of bytes.)
 
 
