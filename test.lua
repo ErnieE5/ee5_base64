@@ -5,11 +5,8 @@ require("util")
 base64=require("base64")
 
 
-function new_input_file(s)
-    local o
-    local f = io.tmpfile()
-    f:write(s)
-    f:seek("set")
+function test_file_helper()
+    local o,f
 
     function value(_)
         return table.concat(o)
@@ -22,35 +19,27 @@ function new_input_file(s)
         end
     end
 
-    function coded(_)
-        return base64.decode_ii(f), collect()
-    end
-
-    function plain(_)
-        return base64.encode_ii(f), collect()
+    function doit(_,v)
+        if v == nil and f ~= nil then
+            f:seek("set")
+            return f, collect()
+        end
+        if f ~= nil then f:close() end
+        f=io.tmpfile()
+        f:write(v)
+        f:seek("set")
+        return f, collect()
     end
 
     function delete(_)
         f:close()
     end
 
-    function reset(_,v)
-        f:seek("set")
-        if v ~= nil then
-            f:close()
-            f=io.tmpfile()
-            f:write(v)
-            f:seek("set")
-        end
-    end
-
     return
     {
         value=value,
-        coded=coded,
-        plain=plain,
+        doit=doit,
         delete=delete,
-        reset=reset
     }
 end
 
@@ -103,33 +92,29 @@ function basic_tests()
 
     s="This is a test string."
 
-    local f = new_input_file("VGhpcyBpcyBhIHRlc3Qgc3RyaW5nLg%%")
-    base64.decode( f:coded() )
+    local f = test_file_helper()
+
+    base64.decode( f:doit("VGhpcyBpcyBhIHRlc3Qgc3RyaW5nLg%%") )
     assert( s == f:value() )
 
-    f:reset("VGhpcyBpcyBhIHRlc3Qgc3RyaW5nLg==")
     base64.alpha("base64")
-    base64.decode( f:coded() )
+    base64.decode( f:doit("VGhpcyBpcyBhIHRlc3Qgc3RyaW5nLg==") )
     assert( s == f:value() )
 
-    f:reset("VGhpcyBpcyBhIHRlc3Qgc3RyaW5nLg")
     base64.alpha("base64url")
-    base64.decode( f:coded() )
+    base64.decode( f:doit("VGhpcyBpcyBhIHRlc3Qgc3RyaW5nLg") )
     assert( s == f:value() )
 
-    f:reset(s)
-    base64.encode( f:plain() )
-    assert( "VGhpcyBpcyBhIHRlc3Qgc3RyaW5nLg" == f:value() )
+    base64.encode( f:doit( s ) )
+    assert( "VGhpcyBpcyBhIHRlc3Qgc3RyaW5nLg"    == f:value() )
 
-    f:reset()
     base64.alpha("base64")
-    base64.encode( f:plain() )
-    assert( "VGhpcyBpcyBhIHRlc3Qgc3RyaW5nLg==" == f:value() )
+    base64.encode( f:doit() )
+    assert( "VGhpcyBpcyBhIHRlc3Qgc3RyaW5nLg=="  == f:value() )
 
-    f:reset()
     base64.alpha( custom_a )
-    base64.encode( f:plain() )
-    assert( "VGhpcyBpcyBhIHRlc3Qgc3RyaW5nLg%%" == f:value() )
+    base64.encode( f:doit() )
+    assert( "VGhpcyBpcyBhIHRlc3Qgc3RyaW5nLg%%"  == f:value() )
 
     f:delete()
 

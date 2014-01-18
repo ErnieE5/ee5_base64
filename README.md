@@ -39,11 +39,10 @@ Dude! Where is my car???
 
 ###More examples:
 
-####stdio
+####stdin to stdout
 ```lua
 base64=require("base64")
-ii=base64.encode_ii(io.stdin)
-base64.encode(ii,function(s) io.write(s) end)
+base64.encode(io.stdin,io.stdout)
 
 --[[ Output
 
@@ -89,7 +88,7 @@ function linespliter()
 end
 
 f=io.open("base64.lua")
-s=f:read("*a")
+s=f:read("*a") -- read entire file into string
 f:close()
 base64.encode(s,linespliter())
 
@@ -125,6 +124,7 @@ What is this?
 base64.alpha("base64url")
 i=io.open("foo")
 o=io.open("bar","w")
+-- String in / out (probably shouldn't be a url!)
 o:write(base64.encode(i:read("*a")))
 i:close()
 o:close()
@@ -147,17 +147,7 @@ User base64 encoding, no term chars
 ]]--
 ```
 #Timing
-These numbers reflect the _encoding_ of an __818K__ file read into a buffer and written to stdout. The tests are run under OS X 10.9.1 with a 2.6 GHz Intel Core i7. 16 GB of memory is available with limited background processing. Each test is run five times. Decoding (tests not shown here) is a _little_ slower mostly because of input sanitation. The _idea_ behind the test_encode.lua script is below. In actuality, the same file was used each time and contains ALL THREE versions of the code as startup processing overhead. The overhead of this libraries startup is lower than the granularity of the time command.
-
-```lua
---[[ test_encode.lua ]]
-base64=require("base64")
-f=io.open("818KDataFile")
-d=f:read("*a")
-f:close()
-e=base64.encode(d)
-io.write(e)
-```
+These numbers reflect the _encoding_ of an __818K__ file read into a buffer and written to stdout. The tests are run under OS X 10.9.1 with a 2.6 GHz Intel Core i7. 16 GB of memory is available with limited background processing. Each test is run five times. Decoding (not shown) is slower because of input sanitation.
 
 
 ```Textile
@@ -166,12 +156,20 @@ Lua 5.2.3  Copyright (C) 1994-2013 Lua.org, PUC-Rio
 $ ls
 -rw-r--r-- 1 Ernie Ewert staff 818K 2014-01-16 21:07 818KDataFile
 -rwxr-xr-x 1 Ernie Ewert staff 9.6K 2014-01-16 21:02 test_encode.lua
+-rwxr-xr-x 1 Ernie Ewert staff  107 2014-01-16 21:03 test_encode_stdio.lua
 -rw-r--r-- 1 Ernie Ewert staff 1.1M 2014-01-16 21:10 dataout.b64
 ```
 
 [ErnieE5/lua_base64 (this library)](https://github.com/ErnieE5/lua_base64)
+```lua
+--[[ test_encode.lua ]]
+require("base64").encode(io.stdin:read("*a"),io.stdout)
+--                       |
+--                       Reads entire file to string
+```
+
 ```Textile
-$ time lua test_encode.lua > dataout.b64 # repeat 5 times
+$ time lua test_encode.lua < 818KDataFile > dataout.b64 # repeat 5 times
 
 real    0m0.202s
 real    0m0.203s
@@ -183,8 +181,17 @@ real    0m0.205s
 
 [paulmoore/base64.lua (Paul Moore)](https://gist.github.com/paulmoore/2563975) __Modified to use the [bit32](http://www.lua.org/manual/5.2/manual.html#6.7) library in 5.2__
 The performance of encoding in this library is _GREATLY_ enhanced with a single line modification. (Nearly twice as fast.) These numbers are "as is." Removing the assert in toChar reduces the run time significantly (778ms total).
+```lua
+--[[ test_encode.lua ]]
+io.stdout:write( require("pm_base64").encode( io.stdin:read("*a") ) )
+--                                            |
+--                                            Reads entire file to string
+```
+
+
+
 ```Textile
-$ time lua test_encode.lua > dataout.b64 # repeat 5 times
+$ time lua test_encode.lua < 818KDataFile > dataout.b64 # repeat 5 times
 
 real    0m1.351s
 real    0m1.360s
@@ -195,8 +202,15 @@ real    0m1.372s
 
 
 [Lua wiki (Alex Kloss)](http://lua-users.org/wiki/BaseSixtyFour)
+```lua
+--[[ test_encode.lua ]]
+io.stdout:write( enc( io.stdin:read("*a") ) )
+--                    |
+--                    Reads entire file to string
+```
+
 ```Textile
-$ time lua test_encode.lua  > dataout.b64 # repeat 5 times
+$ time lua test_encode.lua < 818KDataFile > dataout.b64 # repeat 5 times
 
 real    0m2.443s
 real    0m2.391s
@@ -205,19 +219,58 @@ real    0m2.401s
 real    0m2.406s
 ```
 
-#Memory
-This is brief, but I think the numbers are telling.
+#Memory Usage
+The following results are based on the the tests above in the timing section. (string to string) Building the result string is the largest consumer of memory because all of the data must be accumulated and then concatenated.
+
+### Test ( string / string )
 ```
-$ time -l lua test_encode.lua > dataout.b64
-
-ErnieE5/lua_base64      ~16MB       15888384  maximum resident set size
-paulmoore/base64.lua    ~68MB       68558848  maximum resident set size
-Lua wiki                ~38MB       38924288  maximum resident set size
+ErnieE5/lua_base64      ~16MB       15,888,384  maximum resident set size
+paulmoore/base64.lua    ~68MB       68,558,848  maximum resident set size
+Lua wiki                ~38MB       38,924,288  maximum resident set size
 
 ```
-I am not surprised at the Lua Wiki versions memory picture. I was _stunned_ at the amount of memory consumed by Paul's version. In fact, looking into why his code churns so much memory gave MY code a huge boost in encode performance. (Almost 20% from the prior check-in, thanks Paul!) I wasn't clear on the string:byte() method usage and a simple change had a __huge__ impact. (The 'bytes' table in Paul's code is the input string as a table of bytes.)
-<br/>
-<br/>
+>I am not surprised at the Lua Wiki versions memory picture. I was _stunned_ at the amount of memory consumed by Paul's version. In fact, looking into why his code churns so much memory gave MY code a boost in encode performance. (Almost 20% from the prior check-in, thanks Paul!) I wasn't clear on the string:byte() method usage and a simple change was helpful. (The 'bytes' table in Paul's code is the input string as a table of bytes.)
 
 
+### Test ( string / file out )
+```lua
+--[[ test_encode.lua
+     Test: string in / file out ]]
+i=io.open("818KDataFile")
+o=io:open("dataout.b64","w")
+require("base64").encode(i:read("*a"),o)
+o:close()
+i:close()
+```
+```Textile
+$ time lua test_encode.lua
+
+real    0m0.200s
+
+$ /usr/bin/time -l lua test_encode.lua 2>&1 | grep "maximum"
+
+   3,923,968  maximum resident set size
+```
+
+### Test ( file in / file out )
+```lua
+--[[ test_encode.lua
+     Test: input iterator in / predicate out ]]
+i=io.open("818KDataFile")
+o=io:open("dataout.b64","w")
+require("base64").encode(i,o)
+o:close()
+i:close()
+```
+
+```Textile
+$ time lua test_encode.lua
+
+real    0m0.350s
+
+$ /usr/bin/time -l lua test_encode.lua 2>&1 | grep "maximum"
+
+   1,519,616  maximum resident set size
+
+```
 ![Ernie](http://ee5.net/ernie.png "Ernie")

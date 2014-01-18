@@ -7,7 +7,7 @@
 --
 --  The library exposes these methods.
 --
---      Method      Args / usage
+--      Method      Args
 --      ----------- ----------------------------------------------
 --      encode      String in / out
 --      decode      String in / out
@@ -15,31 +15,19 @@
 --      encode      String, function(value) predicate
 --      decode      String, function(value) predicate
 --
---      encode      iterator_64 in, function(value) predicate
---      decode      64_iterator in, function(value) predicate
---      encode_ii   creates an io read iterator for input
---      decode_ii   creates a string iterator (slightly slower)
+--      encode      file, function(value) predicate
+--      deocde      file, function(value) predicate
 --
---  The predicate versions allow a string to be converted without a complete
---  duplication of the memory in a temporary structure. This is useful if you
---  want to write an existing string encoded / decoded to an output routine
---  without creating a duplicate in memory.
+--      encode      file, file
+--      deocde      file, file
 --
---  The iterator versions allow fully iterative encoding from an input source.
---  See the input iterators for information.
---
---  History:
---      2014/01/13 Original implementation
---      2014/01/13 Performance enhancements & other base64 variants
+--      alpha       alphabet, term char
 --
 
 
 --------------------------------------------------------------------------------
 -- known_base64_alphabets
 --
---
---  Table containing pre-calculated "constant" modifications to the encode /
---  decode routines.
 --
 local known_base64_alphabets=
 {
@@ -94,7 +82,7 @@ local b64e=
     [54]= 50, [55]= 51, [56]= 52, [57]= 53, [58]= 54, [59]= 55,
     [60]= 56, [61]= 57, [62]= 43, [63]= 47
 }
--- Precomputed tables
+-- Precomputed tables (compromise using more memory for speed)
 local b64e_a  -- ready to use
 local b64e_a2 -- byte addend
 local b64e_b1 -- byte addend
@@ -127,28 +115,16 @@ local tail_padd64=
 --
 local ext = bit32.extract -- slight speed, vast visual (IMO)
 
-local function m64_normal( a, b, c )
-    -- Extraction (ext) combines the mask and shift into a single call, halving
-    -- the overhead. The simple math is slightly quicker than a method call to
-    -- shift the middle bits out. A simple mask is all that is needed for the
-    -- lookup.
-
-    -- Each extracted value is then mapped against the alphabet values to
-    -- return the quadruple of chars for the output.
-
-    return  b64e[ ext( a, 2, 6 )                   ],
-            b64e[ ext( a, 0, 2 )*16 + ext(b, 4, 4) ],
-            b64e[ ext( b, 0, 4 )*4  + ext(c, 6, 2) ],
-            b64e[ ext( c, 0, 6 )                   ]
-end
-
-local function m64_faster( a, b, c )
+local function m64( a, b, c )
+    -- Return pre-calculated values for encoded value 1 and 4
+    -- Get the pre-calculated extractions for value 2 and 3, look them
+    -- up and return the proper value.
+    --
     return  b64e_a[a],
             b64e[ b64e_a2[a]+b64e_b1[b] ],
             b64e[ b64e_b2[b]+b64e_c1[c] ],
             b64e_c[c]
 end
-m64=m64_faster
 
 --------------------------------------------------------------------------------
 -- encode_tail64
@@ -197,13 +173,18 @@ end
 --
 local function encode64_io_iterator(file)
 
+    assert( io.type(file)  == "file", "argument must be readable file handle" )
+    assert( file.read ~= nil,         "argument must be readable file handle" )
+
     local ii = { } -- Table for the input iterator
-    local s
-    local sb = string.byte
+
+    setmetatable(ii,{ __tostring=function() return "base64.io_iterator" end})
 
     -- Begin returns an input read iterator
     --
     function ii.begin()
+        local sb  = string.byte
+
         -- The iterator returns three bytes from the file for encoding or nil
         -- when the end of the file has been reached.
         --
@@ -220,17 +201,9 @@ local function encode64_io_iterator(file)
     -- because each sequence of bytes doesn't have to test for EOF.
     --
     function ii.tail()
-        -- If the file was evenly divisible by three then we just return
-        -- nil, nil. If one or two "overflow" bytes exist, return those.
+        -- If one or two "overflow" bytes exist, return those.
         --
-        local x,y
-        if s ~= nil and #s > 0 then
-            x = s:byte(1)
-            if #s > 1 then
-                y = s:byte(2)
-            end
-        end
-        return x, y
+        if s ~= nil then return s:byte(1,2) end
     end
 
     return ii
@@ -376,11 +349,9 @@ local b64d=
 --
 local function u64( b1, b2, b3, b4 )
 
-    -- This is messy looking, but slightly faster than the more "clear" version
-    -- below. 1.1M -> 820K  435ms vs 570ms
-    --
     -- Each comment shows the rough C expression that would be used to generate
-    -- the returned triple.
+    -- the returned triple. We can get away with addition instead of anding the
+    -- values together because there are no overlapping bit patterns.
     --
     return
         -- ([b1]<<2) | ([b2] & 0x30) >> 4
@@ -394,15 +365,6 @@ local function u64( b1, b2, b3, b4 )
         -- [b4] | ([b3]&0x03)<<6)
         --
         b64d[b4] + ext( b64d[b3], 0, 2 ) * 64
-
-    -- local cvt=bit32.lshift(b64d[ b1 ], 18) +
-    --           bit32.lshift(b64d[ b2 ], 12) +
-    --           bit32.lshift(b64d[ b3 ],  6) +
-    --                        b64d[ b4 ]
-    -- return
-    --     bit32.band( bit32.rshift(cvt,16), 0xff ),
-    --     bit32.band( bit32.rshift(cvt, 8), 0xff ),
-    --     bit32.band( cvt, 0xff )
 end
 
 
@@ -747,17 +709,29 @@ end
 --
 --
 local function encode64(i,o)
-    if type(i) == "table" then
-        assert( type(o) == "function", "input iterator requires output predicate")
-        encode64_with_ii(i,o)
-    elseif type(i) == "string" then
+    local method
+
+    if o ~= nil and io.type(o) == "file" then
+        local file_out = o
+        o = function(s) file_out:write(s) end
+    end
+
+    if type(i) == "string" then
         if type(o) == "function" then
-            encode64_with_predicate(i,o)
+            method = encode64_with_predicate
         else
             assert( o == nil, "unsupported request")
-            return encode64_tostring(i)
+            method = encode64_tostring
         end
+    elseif io.type(i) == "file" then
+        assert( type(o) == "function", "file source requires output predicate")
+        i      = encode64_io_iterator(i)
+        method = encode64_with_ii
+    else
+        assert( false, "unsupported mode" )
     end
+
+    return method(i,o)
 end
 
 
@@ -768,17 +742,29 @@ end
 --
 --
 local function decode64(i,o)
-    if type(i) == "table" then
-        assert( type(o) == "function", "input iterator requires output predicate")
-        decode64_with_ii(i,o)
-    elseif type(i) == "string" then
+    local method
+
+    if o ~= nil and io.type(o) == "file" then
+        local file_out = o
+        o = function(s) file_out:write(s) end
+    end
+
+    if type(i) == "string" then
         if type(o) == "function" then
-            decode64_with_predicate(i,o)
+            method = decode64_with_predicate
         else
             assert( o == nil, "unsupported request")
-            return decode64_tostring(i)
+            method = decode64_tostring
         end
+    elseif io.type(i) == "file" then
+        assert( type(o) == "function", "file source requires output predicate")
+        i      = decode64_io_iterator(i)
+        method = decode64_with_ii
+    else
+        assert( false, "unsupported mode" )
     end
+
+    return method(i,o)
 end
 
 set_and_get_alphabet("base64")
@@ -790,8 +776,6 @@ return
 {
     encode      = encode64,
     decode      = decode64,
-    encode_ii   = encode64_io_iterator,
-    decode_ii   = decode64_io_iterator,
     alpha       = set_and_get_alphabet,
 }
 
