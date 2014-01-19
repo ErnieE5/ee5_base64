@@ -106,8 +106,8 @@ local tail_padd64=
 --------------------------------------------------------------------------------
 -- m64
 --
---  Helper function to convert three eight bit values into four ASCII
---  encoded base64 values.
+--  Helper function to convert three eight bit values into four encoded
+--  6 (significant) bit values.
 --
 --                 7             0 7             0 7             0
 --             m64(a a a a a a a a,b b b b b b b b,c c c c c c c c)
@@ -502,8 +502,13 @@ end
 -- output.
 --
 local function decode64_with_predicate( raw, out )
+    -- Sanitize the input to strip characters that are not in the alphabet.
+    --
+    -- Note: This is a deviation from strict implementations where "bad data"
+    --       in the input stream is unsupported.
+    --
     local san = raw:gsub(pattern_strip,"")
-    local len = #san-#san%4
+    local len = #san-#san%4         --
     local rem = #san-len
     local sc  = string.char
     local sb  = string.byte

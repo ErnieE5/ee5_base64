@@ -4,11 +4,11 @@ Lua 5.2 base64 encoding and decoding
 
 This module is written for Lua 5.2 and likely could be used in 5.1 using the [LuaRocks](http://luarocks.org/) [bit32](https://raw.github.com/hishamhm/lua-compat-5.2/bitlib-5.2.2/lbitlib.c) backport. **I** have not tested on 5.1 and likely never will.
 
-This module "exports" 5 methods with various "overloads" that allow interaction with the encoding / decoding routines. Default is to encode and decode as RFC 2045. The implementation is not strict 2045. _Line breaking is the responsibility of the user._
+This module "exports" 3 methods with various "overloads" that allow interaction with the encoding / decoding routines. Default is to encode and decode as RFC 2045. This implementation is not strict 2045. _Line breaking is the responsibility of the user._
 
 The "base64 RFC 2045" encoding is tested against base64 (GNU coreutils) 8.22 & 8.13 and _can_ produce identical output (including line breaks, if _you_ write the data that way).
 
-Decoding creates a duplicate copy of the input string to sanitize the input. Decoding is about 20% slower than encoding for standard alphabets. Custom alphabet decoding is considerably slower (almost 100%) because of the lack of predictable coherent patterns.
+Decoding creates a duplicate copy of the input string to sanitize the input. Decoding is about 20% slower than encoding for standard alphabets. Custom alphabet decoding is considerably slower (_almost_ 2x) because of the lack of predictable coherent patterns.
 
 __Use as you will.__ No warranty. (What do you expect for "free stuff" you find on the web?) **I'd like to know if others find this useful**, but other than that, meh.
 
@@ -252,6 +252,7 @@ real    0m0.200s
 $ /usr/bin/time -l lua test_encode.lua 2>&1 | grep "maximum"
 
    3,923,968  maximum resident set size
+
 ```
 
 ### Test ( file in / file out )
