@@ -1,4 +1,4 @@
-lua_base64
+ee5_base64
 ==========
 Lua 5.2 base64 encoding and decoding
 
@@ -24,7 +24,7 @@ Basic Usage
 Simplest is "string in / string out".
 
 ```lua
-base64=require("base64")
+base64=require("ee5_base64")
 
 print( base64.encode("This is a string") )
 print( base64.decode("RHVkZSEgV2hlcmUgaXMgbXkgY2FyPz8/Cg==") )
@@ -43,12 +43,12 @@ Dude! Where is my car???
 
 ####stdin to stdout
 ```lua
-base64=require("base64")
+base64=require("ee5_base64")
 base64.encode(io.stdin,io.stdout)
 
 --[[ Output
 
-$lua test.lua < base64.lua
+$lua test.lua < ee5_base64.lua
 
 LS1bWyoqKioqKioqKio ... dGVyYXRvcgp9Cg==
 
@@ -89,7 +89,7 @@ function linespliter()
     end
 end
 
-f=io.open("base64.lua")
+f=io.open("ee5_base64.lua")
 s=f:read("*a") -- read entire file into string
 f:close()
 base64.encode(s,linespliter())
@@ -226,7 +226,7 @@ The following results are based on the the tests above in the timing section. (s
 
 ### Test ( string / string )
 ```
-ErnieE5/lua_base64      ~16MB       15,888,384  maximum resident set size
+ErnieE5/ee5_base64      ~16MB       15,888,384  maximum resident set size
 paulmoore/base64.lua    ~68MB       68,558,848  maximum resident set size
 Lua wiki                ~38MB       38,924,288  maximum resident set size
 ```
@@ -240,7 +240,7 @@ Lua wiki                ~38MB       38,924,288  maximum resident set size
      Test: string in / file out ]]
 i=io.open("818KDataFile")
 o=io:open("dataout.b64","w")
-require("base64").encode(i:read("*a"),o)
+require("ee5_base64").encode(i:read("*a"),o)
 o:close()
 i:close()
 ```
@@ -261,7 +261,7 @@ $ /usr/bin/time -l lua test_encode.lua 2>&1 | grep "maximum"
      Test: input iterator in / predicate out ]]
 i=io.open("818KDataFile")
 o=io:open("dataout.b64","w")
-require("base64").encode(i,o)
+require("ee5_base64").encode(i,o)
 o:close()
 i:close()
 ```
