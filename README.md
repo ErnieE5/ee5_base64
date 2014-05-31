@@ -165,9 +165,9 @@ $ ls
 [ErnieE5/lua_base64 (this library)](https://github.com/ErnieE5/lua_base64)
 ```lua
 --[[ test_encode.lua ]]
-require("base64").encode(io.stdin:read("*a"),io.stdout)
---                       |
---                       Reads entire file to string
+require("ee5_base64").encode(io.stdin:read("*a"),io.stdout)
+--                           |
+--                           Reads entire file to string
 ```
 
 ```Textile
