@@ -1,8 +1,8 @@
 ee5_base64
 ==========
-Lua 5.2 base64 encoding and decoding
+Lua 5.2 and LuaJIT 2.x base64 encoding and decoding
 
-This module is written for Lua 5.2 and likely could be used in 5.1 using the [LuaRocks](http://luarocks.org/) [bit32](https://raw.github.com/hishamhm/lua-compat-5.2/bitlib-5.2.2/lbitlib.c) backport. **I** have not tested on 5.1 and likely never will.
+This module is written for Lua 5.2 (and was ported to LuaJIT 2.x) and likely could be used in 5.1 using the [LuaRocks](http://luarocks.org/) [bit32](https://raw.github.com/hishamhm/lua-compat-5.2/bitlib-5.2.2/lbitlib.c) backport. **I** have not tested on 5.1 and likely never will.
 
 This module "exports" 3 methods with various "overloads" that allow interaction with the encoding / decoding routines. Default is to encode and decode as RFC 2045. This implementation is not strict 2045. _Line breaking is the responsibility of the user._
 
