@@ -117,7 +117,21 @@ local tail_padd64=
 --                                    [    b b b b c c]|
 --                                                [    c c c c c c]
 --
-local ext = bit32.extract -- slight speed, vast visual (IMO)
+local ext
+
+if bit32 then
+    ext = bit32.extract -- slight speed, vast visual (IMO)
+elseif bit then
+    local band = bit.band
+    local rshift = bit.rshift
+    ext = 
+        function(n, field, width)
+            width = width or 1
+            return band(rshift(n, field), 2^width-1)
+        end
+else
+    error("Neither Lua 5.2 bit32 nor LuaJit bit library found!")
+end
 
 local function m64( a, b, c )
     -- Return pre-calculated values for encoded value 1 and 4
@@ -430,8 +444,7 @@ local function decode64_io_iterator( file )
             -- see the comments in decode64_with_predicate for a rundown of
             -- the results of this loop (sans the coroutine)
             for i=1,len,4 do
-                coroutine.yield
-                (
+                coroutine.yield (
                     sc( u64( sb( cl, i, i+4 ) ) )
                 )
             end
@@ -442,8 +455,7 @@ local function decode64_io_iterator( file )
         local l = #ll
 
         if l >= 4 and ll:sub(-1) ~= tail_padd64[2] then
-            coroutine.yield
-            (
+            coroutine.yield (
                 sc( u64( sb( ll, 1, 4 ) ) )
             )
             l=l-4
