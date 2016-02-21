@@ -36,8 +36,18 @@ Dude! Where is my car???
 
 ]]--
 ```
-> I don't encourage using these routines (**at all**) for large strings. A Lua c-module will handle this _considerably_ faster. Just "for fun" I ran a 600M file through base64 and this utility. 0m3.306s vs **8m**13.139s! It is plausible that base64 spun multiple threads, but I suspect that the real reason is that all of the "overhead" of a function call vs an extremely tight and optimized C routine is the real factor. (this is a perverse example, it annoys me no end that base64 even _exists_)
+> I don't encourage using these routines (**at all**) for huge strings. A Lua c-module will handle this _considerably_ faster. Just "for fun" I ran a 600M file through base64 and this utility. 0m3.306s vs **8m**13.139s! It is plausible that base64 spun multiple threads, but I suspect that the real reason is that all of the "overhead" of a function call vs an extremely tight and optimized C routine is the real factor. (this is a perverse example, it annoys me no end that base64 even _exists_)
 
+> Update *2016/21/02*: Also 'just for fun' I timed test_encode.lua against base64 ( Ubuntu 15.10 Linux/4.2.0-23-generic/x86_64 ) today with a 1G file. _ALL_ of the time is in the encoding stage with a single core pegged at 100%. The decrease in time is mostly due to the test machine having a higher clock than the laptop I ran the tests on previously. (There are _MINOR improvements_ that impact the times, but not to the extent shown.)
+
+```bash
+$/usr/bin/time --format %E lua test_encode.lua < sample4kp.mp4 > woo.b64
+6:43.89
+$/usr/bin/time --format %E base64 -w 0 < sample4kp.mp4 > wow.b64
+0:01.39
+$diff woo.b64 wow.b64
+$
+```
 
 ###More examples:
 

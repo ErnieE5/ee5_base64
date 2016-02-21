@@ -1,9 +1,6 @@
 --[[ Simple verifications for the base64 encode / decode ]]
 
-require("util")
-
-base64=require("base64")
-
+base64=require("ee5_base64")
 
 function test_file_helper()
     local o,f

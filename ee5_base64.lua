@@ -60,33 +60,8 @@ local pattern_strip
 --[[**************************************************************************]]
 
 
---------------------------------------------------------------------------------
--- base64 encoding table
---
--- Each (zero based, six bit) index is matched against the ASCII
--- value that represents the six bit pattern.
---
---          [6 bit encoding]=ASCII value
---
--- This table varies from normal Lua one based indexing to avoid
--- extra math during the fix-ups. This is a performance improvement
--- for very long encoding runs.
---
-local b64e=
-{
-    [ 0]= 65, [ 1]= 66, [ 2]= 67, [ 3]= 68, [ 4]= 69, [ 5]= 70,
-    [ 6]= 71, [ 7]= 72, [ 8]= 73, [ 9]= 74, [10]= 75, [11]= 76,
-    [12]= 77, [13]= 78, [14]= 79, [15]= 80, [16]= 81, [17]= 82,
-    [18]= 83, [19]= 84, [20]= 85, [21]= 86, [22]= 87, [23]= 88,
-    [24]= 89, [25]= 90, [26]= 97, [27]= 98, [28]= 99, [29]=100,
-    [30]=101, [31]=102, [32]=103, [33]=104, [34]=105, [35]=106,
-    [36]=107, [37]=108, [38]=109, [39]=110, [40]=111, [41]=112,
-    [42]=113, [43]=114, [44]=115, [45]=116, [46]=117, [47]=118,
-    [48]=119, [49]=120, [50]=121, [51]=122, [52]= 48, [53]= 49,
-    [54]= 50, [55]= 51, [56]= 52, [57]= 53, [58]= 54, [59]= 55,
-    [60]= 56, [61]= 57, [62]= 43, [63]= 47
-}
 -- Precomputed tables (compromise using more memory for speed)
+local b64e    -- 6 bit patterns to ANSI 'char' values
 local b64e_a  -- ready to use
 local b64e_a2 -- byte addend
 local b64e_b1 -- byte addend
@@ -104,36 +79,20 @@ local tail_padd64=
 
 
 --------------------------------------------------------------------------------
--- m64
+-- e64
 --
 --  Helper function to convert three eight bit values into four encoded
 --  6 (significant) bit values.
 --
 --                 7             0 7             0 7             0
---             m64(a a a a a a a a,b b b b b b b b,c c c c c c c c)
+--             e64(a a a a a a a a,b b b b b b b b,c c c c c c c c)
 --                 |           |           |           |
 --  return    [    a a a a a a]|           |           |
 --                        [    a a b b b b]|           |
 --                                    [    b b b b c c]|
 --                                                [    c c c c c c]
 --
-local ext
-
-if bit32 then
-    ext = bit32.extract -- slight speed, vast visual (IMO)
-elseif bit then
-    local band = bit.band
-    local rshift = bit.rshift
-    ext = 
-        function(n, field, width)
-            width = width or 1
-            return band(rshift(n, field), 2^width-1)
-        end
-else
-    error("Neither Lua 5.2 bit32 nor LuaJit bit library found!")
-end
-
-local function m64( a, b, c )
+local function e64( a, b, c )
     -- Return pre-calculated values for encoded value 1 and 4
     -- Get the pre-calculated extractions for value 2 and 3, look them
     -- up and return the proper value.
@@ -143,6 +102,7 @@ local function m64( a, b, c )
             b64e[ b64e_b2[b]+b64e_c1[c] ],
             b64e_c[c]
 end
+
 
 --------------------------------------------------------------------------------
 -- encode_tail64
@@ -163,7 +123,7 @@ local function encode_tail64( out, x, y )
         -- Encode three bytes of info, with the tail byte as zeros and
         -- ignore any fourth encoded ASCII value. (We should NOT have a
         -- forth byte at this point.)
-        local b1, b2, b3 = m64( a, b, 0 )
+        local b1, b2, b3 = e64( a, b, 0 )
 
         -- always add the first 2 six bit values to the res table
         -- 1 remainder input byte needs 8 output bits
@@ -237,7 +197,7 @@ local function encode64_with_ii( ii, out )
     local sc=string.char
 
     for a, b, c in ii.begin() do
-        out( sc( m64( a, b, c ) ) )
+        out( sc( e64( a, b, c ) ) )
     end
 
     encode_tail64( out, ii.tail() )
@@ -265,7 +225,7 @@ local function encode64_with_predicate( raw, out )
         -- This really isn't intended as obfuscation. It is more about
         -- loop optimization and removing temporaries.
         --
-        out( sc( m64( sb( raw ,i , i+3 ) ) ) )
+        out( sc( e64( sb( raw ,i , i+3 ) ) ) )
         --   |   |    |
         --   |   |    byte i to i + 3
         --   |   |
@@ -322,44 +282,24 @@ end
 --[[**************************************************************************]]
 
 
---------------------------------------------------------------------------------
--- base64 decoding table
---
--- Each ASCII encoded value index is matched against the zero based, six bit
--- bit pattern.
---
---          [ASCII value]=6 bit encoding value
---
-local b64d=
-{
-    [ 65]= 0, [ 66]= 1, [ 67]= 2, [ 68]= 3, [ 69]= 4, [ 70]= 5,
-    [ 71]= 6, [ 72]= 7, [ 73]= 8, [ 74]= 9, [ 75]=10, [ 76]=11,
-    [ 77]=12, [ 78]=13, [ 79]=14, [ 80]=15, [ 81]=16, [ 82]=17,
-    [ 83]=18, [ 84]=19, [ 85]=20, [ 86]=21, [ 87]=22, [ 88]=23,
-    [ 89]=24, [ 90]=25, [ 97]=26, [ 98]=27, [ 99]=28, [100]=29,
-    [101]=30, [102]=31, [103]=32, [104]=33, [105]=34, [106]=35,
-    [107]=36, [108]=37, [109]=38, [110]=39, [111]=40, [112]=41,
-    [113]=42, [114]=43, [115]=44, [116]=45, [117]=46, [118]=47,
-    [119]=48, [120]=49, [121]=50, [122]=51, [ 48]=52, [ 49]=53,
-    [ 50]=54, [ 51]=55, [ 52]=56, [ 53]=57, [ 54]=58, [ 55]=59,
-    [ 56]=60, [ 57]=61, [ 43]=62, [ 47]=63
-}
 -- Precomputed tables (compromise using more memory for speed)
+local b64d    -- ANSI 'char' to right shifted bit pattern
 local b64d_a1 -- byte addend
 local b64d_a2 -- byte addend
 local b64d_b1 -- byte addend
 local b64d_b2 -- byte addend
 local b64d_c1 -- byte addend
+local b64d_z  -- zero
 
 
 --------------------------------------------------------------------------------
--- u64
+-- d64
 --
 --  Helper function to convert four six bit values into three full eight
 --  bit values. Input values are the integer expression of the six bit value
 --  encoded in the original base64 encoded string.
 --
---     u64( _ _1 1 1 1 1 1,
+--     d64( _ _1 1 1 1 1 1,
 --             |       _ _ 2 2 2 2 2 2,
 --             |           |       _ _ 3 3 3 3 3 3,
 --             |           |           |       _ _ 4 4 4 4 4 4)
@@ -368,7 +308,7 @@ local b64d_c1 -- byte addend
 --         ',                 [2 2 2 2 3 3 3 3]    |
 --         '                                  [3 3 4 4 4 4 4 4]
 --
-local function u64( b1, b2, b3, b4 )
+local function d64( b1, b2, b3, b4 )
     -- We can get away with addition instead of anding the values together
     -- because there are no  overlapping bit patterns.
     --
@@ -387,14 +327,14 @@ end
 local function decode_tail64( out, e1, e2 ,e3, e4 )
 
     if tail_padd64[2] == "" or e4 == tail_padd64[2]:byte() then
-        local n3 = b64e[0]
+        local n3 = b64d_z
 
         if e3 ~= nil and e3 ~= tail_padd64[2]:byte() then
             n3 = e3
         end
 
         -- Unpack the six bit values into the 8 bit values
-        local b1, b2 = u64( e1, e2, n3, b64e[0] )
+        local b1, b2 = d64( e1, e2, n3, b64d_z )
 
         -- And add them to the res table
         if e3 ~= nil and e3 ~= tail_padd64[2]:byte() then
@@ -424,6 +364,7 @@ local function decode64_io_iterator( file )
         local sb=string.byte
         local ll="" -- last line storage
         local len
+        local yield = coroutine.yield
 
         -- Read a "reasonable amount" of data into the line buffer. Line by
         -- line is not used so that a file with no line breaks doesn't
@@ -444,9 +385,7 @@ local function decode64_io_iterator( file )
             -- see the comments in decode64_with_predicate for a rundown of
             -- the results of this loop (sans the coroutine)
             for i=1,len,4 do
-                coroutine.yield (
-                    sc( u64( sb( cl, i, i+4 ) ) )
-                )
+                yield( sc( d64( sb( cl, i, i+4 ) ) ) )
             end
 
             ll = cl:sub( len +1, #cl )
@@ -455,9 +394,7 @@ local function decode64_io_iterator( file )
         local l = #ll
 
         if l >= 4 and ll:sub(-1) ~= tail_padd64[2] then
-            coroutine.yield (
-                sc( u64( sb( ll, 1, 4 ) ) )
-            )
+            yield( sc( d64( sb( ll, 1, 4 ) ) ) )
             l=l-4
         end
 
@@ -466,14 +403,14 @@ local function decode64_io_iterator( file )
             local e1,e2,e3,e4 = ll:byte( 0 - l, -1 )
 
             if e1 ~= nil then
-                decode_tail64( function(s) coroutine.yield( s ) end, e1, e2, e3, e4 )
+                decode_tail64( function(s) yield( s ) end, e1, e2, e3, e4 )
             end
         end
 
     end
 
     -- Returns an input iterator that is implemented as a coroutine. Each
-    -- yield of the co-routine sends reconstructed bytes to the lopp handling
+    -- yield of the co-routine sends reconstructed bytes to the loop handling
     -- the iteration.
     --
     function ii.begin()
@@ -520,7 +457,7 @@ local function decode64_with_predicate( raw, out )
     --       in the input stream is unsupported.
     --
     local san = raw:gsub(pattern_strip,"")
-    local len = #san-#san%4         --
+    local len = #san-#san%4
     local rem = #san-len
     local sc  = string.char
     local sb  = string.byte
@@ -531,7 +468,7 @@ local function decode64_with_predicate( raw, out )
     end
 
     for i=1,len,4 do
-        out( sc( u64( sb( san, i, i+4 ) ) ) )
+        out( sc( d64( sb( san, i, i+4 ) ) ) )
     end
 
     if rem > 0 then
@@ -594,8 +531,8 @@ local function set_and_get_alphabet(alpha,term)
         assert( #c_alpha._alpha == 64,    "The alphabet ~must~ be 64 unique values."  )
         assert( #c_alpha._term  <=  1,    "Specify zero or one termination character.")
 
-        b64d={}
-        b64e={}
+        b64d={}  -- Decode table alpha          -> right shifted int values
+        b64e={}  -- Encode table 0-63 (6 bits)  -> char table
         local s=""
         for i = 1,64 do
             local byte = c_alpha._alpha:byte(i)
@@ -604,6 +541,23 @@ local function set_and_get_alphabet(alpha,term)
             assert( b64d[byte] == nil, "Duplicate value '"..str.."'" )
             b64d[byte]=i-1
             s=s..str
+        end
+
+
+        local ext --Alias for extraction routine that avoids extra table lookups
+
+        if bit32 then
+            ext = bit32.extract -- slight speed, vast visual (IMO)
+        elseif bit then
+            local band = bit.band
+            local rshift = bit.rshift
+            ext =
+                function(n, field, width)
+                    width = width or 1
+                    return band(rshift(n, field), 2^width-1)
+                end
+        else
+            error("Neither Lua 5.2 bit32 nor LuaJit bit library found!")
         end
 
         -- preload encode lookup tables
@@ -629,6 +583,7 @@ local function set_and_get_alphabet(alpha,term)
         b64d_b1 = {}
         b64d_b2 = {}
         b64d_c1 = {}
+        b64d_z  = b64e[0]
 
         for k,v in pairs(b64d) do
             -- Each comment shows the rough C expression that would be used to
